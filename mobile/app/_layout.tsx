@@ -1,0 +1,60 @@
+import React, { useEffect } from 'react'
+import { Stack } from 'expo-router'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { GestureHandlerRootView } from 'react-native-gesture-handler'
+import { SafeAreaProvider } from 'react-native-safe-area-context'
+import { StatusBar } from 'expo-status-bar'
+import { StyleSheet } from 'react-native'
+import { StripeWrapper } from '../src/components/StripeWrapper'
+import { useAuthStore } from '../src/store/auth.store'
+import { setUnauthorizedHandler } from '../src/api/client'
+import { usePushNotifications } from '../src/hooks/usePushNotifications'
+import { colors } from '../src/constants/theme'
+
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      retry: 1,
+      staleTime: 1000 * 60 * 5,
+    },
+  },
+})
+
+function RootLayoutInner() {
+  const { hydrate, logout } = useAuthStore()
+
+  useEffect(() => {
+    hydrate()
+    setUnauthorizedHandler(() => logout())
+  }, [hydrate, logout])
+
+  usePushNotifications()
+
+  return (
+    <Stack screenOptions={{ headerShown: false }}>
+      <Stack.Screen name="index" />
+      <Stack.Screen name="(auth)" />
+      <Stack.Screen name="(customer)" />
+      <Stack.Screen name="(provider)" />
+      <Stack.Screen name="chat" />
+      <Stack.Screen name="+not-found" />
+    </Stack>
+  )
+}
+
+export default function RootLayout() {
+  return (
+    <QueryClientProvider client={queryClient}>
+      <GestureHandlerRootView style={styles.root}>
+        <SafeAreaProvider>
+          <StripeWrapper>
+            <StatusBar style="auto" />
+            <RootLayoutInner />
+          </StripeWrapper>
+        </SafeAreaProvider>
+      </GestureHandlerRootView>
+    </QueryClientProvider>
+  )
+}
+
+const styles = StyleSheet.create({ root: { flex: 1, backgroundColor: colors.background } })

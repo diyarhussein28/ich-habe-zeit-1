@@ -1,0 +1,795 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ─── Enums ───────────────────────────────────────────────────────────────────
+
+enum UserRole {
+  CUSTOMER
+  PROVIDER
+  HELP_DESK
+  ADMIN
+}
+
+enum VerificationStatus {
+  REGISTERED
+  PROFILE_COMPLETE
+  KYC_PENDING
+  KYC_VERIFIED
+  KYC_REJECTED
+  KYC_RESUBMISSION
+  PAYOUT_RESTRICTED
+  SUSPENDED
+}
+
+enum KycDocumentType {
+  ID_FRONT
+  ID_BACK
+  SELFIE_WITH_ID
+}
+
+enum KycDocumentStatus {
+  UPLOADED
+  APPROVED
+  REJECTED
+  RESUBMISSION_REQUIRED
+}
+
+enum OrderStatus {
+  DRAFT
+  OPEN
+  OFFER_RECEIVED
+  AWAITING_PAYMENT
+  IN_PROGRESS
+  COMPLETED_BY_PROVIDER
+  AWAITING_RELEASE
+  DISPUTED
+  RELEASED
+  REFUNDED
+  PARTIALLY_RELEASED
+  CANCELLED
+  EXPIRED
+}
+
+enum OfferStatus {
+  PENDING
+  ACCEPTED
+  REJECTED
+  WITHDRAWN
+  EXPIRED
+}
+
+enum DisputeStatus {
+  OPEN
+  IN_REVIEW
+  PENDING_DECISION
+  RESOLVED
+  ESCALATED
+}
+
+enum DisputeOutcome {
+  FULL_RELEASE
+  PARTIAL_RELEASE
+  FULL_REFUND
+  REWORK_AGREEMENT
+  ESCALATED
+}
+
+enum InvoiceType {
+  SERVICE_INVOICE
+  COMMISSION_INVOICE
+}
+
+enum PricingModel {
+  PER_HOUR
+  FIXED_PRICE
+  CUSTOM_QUOTE
+}
+
+enum BroadcastType {
+  OPEN
+  DIRECT
+}
+
+enum UrgencyFlag {
+  NORMAL
+  URGENT
+}
+
+enum PaymentStatus {
+  PENDING
+  CAPTURED
+  RELEASED
+  REFUNDED
+  FAILED
+}
+
+// ─── Users ────────────────────────────────────────────────────────────────────
+
+model User {
+  id                String             @id @default(uuid())
+  email             String             @unique
+  emailVerified     Boolean            @default(false)
+  phone             String             @unique
+  phoneVerified     Boolean            @default(false)
+  passwordHash      String
+  role              UserRole
+  verificationStatus VerificationStatus @default(REGISTERED)
+  displayName       String
+  profilePhotoUrl   String?
+  dateOfBirth       DateTime?
+  isActive          Boolean            @default(true)
+  mfaEnabled        Boolean            @default(false)
+  mfaSecret         String?
+  mangopayUserId    String?            @unique
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+  lastLoginAt       DateTime?
+  lastLoginIp       String?
+
+  // Relations
+  customerProfile   CustomerProfile?
+  providerProfile   ProviderProfile?
+  addresses         Address[]
+  sessions          Session[]
+  otpCodes          OtpCode[]
+  consentRecords    ConsentRecord[]
+  auditLogs         AuditLog[]         @relation("AuditLogUser")
+  adminAuditLogs    AuditLog[]         @relation("AuditLogAdmin")
+
+  // Order relations
+  customerOrders    Order[]            @relation("CustomerOrders")
+
+  // Notification settings
+  notificationSettings NotificationSettings?
+  kycDocuments         KycDocument[]
+  pushTokens           PushToken[]
+
+  @@index([email])
+  @@index([phone])
+  @@index([role])
+  @@index([verificationStatus])
+}
+
+model CustomerProfile {
+  id             String   @id @default(uuid())
+  userId         String   @unique
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Relations
+  requests       ServiceRequest[]
+  ratings        Rating[]         @relation("RatingsReceived")
+  ratingsGiven   Rating[]         @relation("RatingsGiven")
+
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+model ProviderProfile {
+  id               String       @id @default(uuid())
+  userId           String       @unique
+  user             User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  bio              String?      @db.Text
+  servicePhotoUrls String[]
+  pricingModel     PricingModel @default(FIXED_PRICE)
+  languages        String[]
+  isAvailable      Boolean      @default(true)
+  averageRating    Float        @default(0)
+  totalReviews     Int          @default(0)
+
+  // Tax information
+  isKleinunternehmer Boolean    @default(false)
+  vatNumber          String?
+  legalName          String?
+  taxId              String?
+
+  // Stripe Connect
+  stripeConnectAccountId String?
+  stripeConnectEnabled   Boolean @default(false)
+
+  // Mangopay (legacy — replaced by Stripe)
+  mangopayWalletId   String?
+  mangopayBankAccountId String?
+  ibanLast4          String?
+
+  // Working hours (JSON: { mon: {open: "08:00", close: "18:00"}, ... })
+  workingHours     Json?
+
+  // Relations
+  serviceAreas     ServiceArea[]
+  providerCategories ProviderCategory[]
+  offers           Offer[]
+  ratings          Rating[]             @relation("ProviderRatingsReceived")
+  ratingsGiven     Rating[]             @relation("ProviderRatingsGiven")
+
+  createdAt        DateTime    @default(now())
+  updatedAt        DateTime    @updatedAt
+}
+
+model Address {
+  id       String  @id @default(uuid())
+  userId   String
+  user     User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  label    String  // Home, Work, Other
+  street   String
+  city     String
+  plz      String
+  country  String  @default("DE")
+  lat      Float?
+  lon      Float?
+  isDefault Boolean @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+  @@index([plz])
+}
+
+model ServiceArea {
+  id              String          @id @default(uuid())
+  providerProfileId String
+  providerProfile ProviderProfile @relation(fields: [providerProfileId], references: [id], onDelete: Cascade)
+  homePlz         String
+  radiusKm        Int             @default(25)
+  plzList         String[]        // specific PLZs in range
+
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  @@index([providerProfileId])
+}
+
+// ─── Categories ───────────────────────────────────────────────────────────────
+
+model Category {
+  id               String     @id @default(uuid())
+  name             String
+  slug             String     @unique
+  description      String?
+  iconUrl          String?
+  parentId         String?
+  parent           Category?  @relation("CategoryChildren", fields: [parentId], references: [id])
+  children         Category[] @relation("CategoryChildren")
+  isActive         Boolean    @default(true)
+  commissionRate   Float?     // override global rate
+  geoRestrictions  String[]   // PLZ prefixes or city codes
+  // Dynamic custom fields schema (JSON array of field definitions)
+  customFields     Json?
+  sortOrder        Int        @default(0)
+
+  // Relations
+  serviceRequests  ServiceRequest[]
+  providerCategories ProviderCategory[]
+  commissionRules  CommissionRule[]
+
+  createdAt        DateTime   @default(now())
+  updatedAt        DateTime   @updatedAt
+
+  @@index([parentId])
+  @@index([isActive])
+}
+
+model ProviderCategory {
+  id                String          @id @default(uuid())
+  providerProfileId String
+  providerProfile   ProviderProfile @relation(fields: [providerProfileId], references: [id], onDelete: Cascade)
+  categoryId        String
+  category          Category        @relation(fields: [categoryId], references: [id])
+  isVerified        Boolean         @default(false)
+  verificationDocUrls String[]
+
+  createdAt         DateTime        @default(now())
+
+  @@unique([providerProfileId, categoryId])
+  @@index([categoryId])
+}
+
+// ─── Service Requests & Offers ───────────────────────────────────────────────
+
+model ServiceRequest {
+  id               String          @id @default(uuid())
+  customerId       String
+  customer         CustomerProfile @relation(fields: [customerId], references: [id])
+  categoryId       String
+  category         Category        @relation(fields: [categoryId], references: [id])
+
+  title            String          @db.VarChar(100)
+  description      String          @db.VarChar(2000)
+  status           OrderStatus     @default(DRAFT)
+
+  // Location
+  addressStreet    String?
+  addressCity      String?
+  plz              String
+  lat              Float?
+  lon              Float?
+
+  // Scheduling
+  preferredDateStart DateTime
+  preferredDateEnd   DateTime?
+
+  // Budget
+  budgetMin        Float?
+  budgetMax        Float?
+  budgetType       String          @default("range") // "exact", "range", "none"
+
+  // Options
+  materialsIncluded String         @default("to_be_discussed") // "yes", "no", "to_be_discussed"
+  urgency          UrgencyFlag     @default(NORMAL)
+  broadcastType    BroadcastType   @default(OPEN)
+  directProviderId String?
+
+  // Dynamic fields answers (JSON)
+  customFieldValues Json?
+
+  // Photos
+  photoUrls        String[]
+
+  // Expiry
+  expiresAt        DateTime?
+
+  // Relations
+  offers           Offer[]
+  order            Order?
+
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+
+  @@index([customerId])
+  @@index([categoryId])
+  @@index([status])
+  @@index([plz])
+}
+
+model Offer {
+  id               String          @id @default(uuid())
+  requestId        String
+  request          ServiceRequest  @relation(fields: [requestId], references: [id])
+  providerId       String
+  provider         ProviderProfile @relation(fields: [providerId], references: [id])
+
+  status           OfferStatus     @default(PENDING)
+
+  // Pricing
+  proposedPrice    Float
+  pricingBreakdown Json?
+
+  // Scheduling
+  proposedDate     DateTime
+  estimatedDurationHours Float?
+
+  // Scope
+  scopeOfWork      String          @db.Text
+  exclusions       String?         @db.Text
+  materialsHandling String         @default("included") // "included", "excluded", "billed_separately"
+
+  // Validity
+  validUntil       DateTime
+  personalMessage  String?         @db.Text
+
+  // Relations
+  order            Order?
+
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+
+  @@index([requestId])
+  @@index([providerId])
+  @@index([status])
+}
+
+// ─── Orders ───────────────────────────────────────────────────────────────────
+
+model Order {
+  id               String          @id @default(uuid())
+  requestId        String          @unique
+  request          ServiceRequest  @relation(fields: [requestId], references: [id])
+  offerId          String          @unique
+  offer            Offer           @relation(fields: [offerId], references: [id])
+  customerId       String
+  customer         User            @relation("CustomerOrders", fields: [customerId], references: [id])
+
+  status           OrderStatus     @default(AWAITING_PAYMENT)
+
+  // Financial
+  grossAmount      Float
+  commissionRate   Float
+  commissionAmount Float
+  vatOnCommission  Float
+  netProviderAmount Float
+  currency         String          @default("EUR")
+
+  // Mangopay
+  mangopayPayInId    String?
+  mangopayEscrowWalletId String?
+  mangopayTransferId  String?
+  mangopayPayOutId    String?
+  paymentStatus      PaymentStatus  @default(PENDING)
+
+  // Completion
+  completedAt      DateTime?
+  completionPhotoUrls String[]
+  completionNote   String?
+
+  // Release
+  releaseWindowHours Int           @default(72)
+  releaseDeadline  DateTime?
+  releasedAt       DateTime?
+  autoReleased     Boolean         @default(false)
+
+  // Partial release (for PARTIALLY_RELEASED)
+  releasedAmount   Float?
+  refundedAmount   Float?
+
+  // Relations
+  chat             Chat?
+  dispute          Dispute?
+  invoices         Invoice[]
+  statusHistory    OrderStatusHistory[]
+
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+
+  @@index([customerId])
+  @@index([status])
+  @@index([paymentStatus])
+}
+
+model OrderStatusHistory {
+  id        String      @id @default(uuid())
+  orderId   String
+  order     Order       @relation(fields: [orderId], references: [id])
+  status    OrderStatus
+  triggeredBy String?   // userId or "system"
+  note      String?
+  createdAt DateTime    @default(now())
+
+  @@index([orderId])
+}
+
+// ─── Chat ─────────────────────────────────────────────────────────────────────
+
+model Chat {
+  id        String        @id @default(uuid())
+  orderId   String        @unique
+  order     Order         @relation(fields: [orderId], references: [id])
+  messages  ChatMessage[]
+  createdAt DateTime      @default(now())
+}
+
+model ChatMessage {
+  id          String   @id @default(uuid())
+  chatId      String
+  chat        Chat     @relation(fields: [chatId], references: [id])
+  senderId    String
+  content     String   @db.Text
+  isSystem    Boolean  @default(false)
+  attachments ChatAttachment[]
+  readAt      DateTime?
+  createdAt   DateTime @default(now())
+
+  @@index([chatId])
+  @@index([senderId])
+}
+
+model ChatAttachment {
+  id          String      @id @default(uuid())
+  messageId   String
+  message     ChatMessage @relation(fields: [messageId], references: [id])
+  fileUrl     String
+  fileName    String
+  fileType    String      // "image", "pdf"
+  fileSizeBytes Int
+  createdAt   DateTime    @default(now())
+}
+
+// ─── Disputes ─────────────────────────────────────────────────────────────────
+
+model Dispute {
+  id            String        @id @default(uuid())
+  orderId       String        @unique
+  order         Order         @relation(fields: [orderId], references: [id])
+  openedById    String        // userId
+
+  status        DisputeStatus @default(OPEN)
+  reasonCategory String
+  description   String        @db.Text
+
+  // Evidence
+  evidence     DisputeEvidence[]
+
+  // Help Desk
+  assignedToId  String?
+  internalNote  String?       @db.Text
+  recommendation DisputeOutcome?
+
+  // Resolution
+  outcome       DisputeOutcome?
+  resolvedById  String?
+  resolvedAt    DateTime?
+  resolutionNote String?      @db.Text
+
+  // SLA
+  firstResponseAt DateTime?
+
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  @@index([status])
+  @@index([assignedToId])
+}
+
+model DisputeEvidence {
+  id           String   @id @default(uuid())
+  disputeId    String
+  dispute      Dispute  @relation(fields: [disputeId], references: [id])
+  side         String   // "customer" | "provider"
+
+  uploadedById String
+  fileUrl      String
+  fileName     String
+  fileType     String
+  fileSizeBytes Int
+
+  createdAt    DateTime @default(now())
+
+  @@index([disputeId])
+}
+
+// ─── Invoices ─────────────────────────────────────────────────────────────────
+
+model Invoice {
+  id             String      @id @default(uuid())
+  invoiceNumber  String      @unique // IHZ-YYYY-NNNNNN
+  invoiceType    InvoiceType
+  orderId        String
+  order          Order       @relation(fields: [orderId], references: [id])
+
+  issuerId       String      // userId (provider) or platform
+  receiverId     String      // userId (customer or provider)
+
+  issueDate      DateTime    @default(now())
+  serviceDate    DateTime
+
+  subtotalAmount Float
+  vatRate        Float       // 0.00, 0.07, or 0.19
+  vatAmount      Float
+  totalAmount    Float
+  currency       String      @default("EUR")
+
+  pdfStorageKey  String?
+  legalNotes     String?     @db.Text
+
+  createdAt      DateTime    @default(now())
+
+  @@index([orderId])
+  @@index([issuerId])
+  @@index([receiverId])
+  @@index([invoiceNumber])
+}
+
+// ─── Ratings ──────────────────────────────────────────────────────────────────
+
+model Rating {
+  id          String   @id @default(uuid())
+  orderId     String
+
+  // Customer rating provider
+  customerRaterId    String?
+  customerRater      CustomerProfile? @relation("RatingsGiven", fields: [customerRaterId], references: [id])
+  providerReceiverId String?
+  providerReceiver   ProviderProfile? @relation("ProviderRatingsReceived", fields: [providerReceiverId], references: [id])
+
+  // Provider rating customer
+  providerRaterId    String?
+  providerRater      ProviderProfile? @relation("ProviderRatingsGiven", fields: [providerRaterId], references: [id])
+  customerReceiverId String?
+  customerReceiver   CustomerProfile? @relation("RatingsReceived", fields: [customerReceiverId], references: [id])
+
+  score       Int      // 1–5
+  comment     String?  @db.Text
+
+  createdAt   DateTime @default(now())
+
+  @@index([orderId])
+  @@index([providerReceiverId])
+}
+
+// ─── KYC Documents ───────────────────────────────────────────────────────────
+
+model KycDocument {
+  id            String            @id @default(uuid())
+  userId        String
+  user          User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type          KycDocumentType
+  status        KycDocumentStatus @default(UPLOADED)
+  fileKey       String            // relative path under uploads/
+  fileName      String
+  mimeType      String
+  fileSizeBytes Int
+  reviewNote    String?
+  reviewedById  String?
+  reviewedAt    DateTime?
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+
+  @@unique([userId, type])
+  @@index([userId])
+  @@index([status])
+}
+
+// ─── Push Tokens ─────────────────────────────────────────────────────────────
+
+model PushToken {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  token     String   @unique
+  platform  String   // "ios" | "android"
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+}
+
+// ─── Notifications & Sessions ─────────────────────────────────────────────────
+
+model Session {
+  id           String   @id @default(uuid())
+  userId       String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  token        String   @unique
+  deviceInfo   String?
+  ipAddress    String?
+  isTrusted    Boolean  @default(false)
+  trustedUntil DateTime?
+  expiresAt    DateTime
+  revokedAt    DateTime?
+  createdAt    DateTime @default(now())
+
+  @@index([userId])
+  @@index([token])
+}
+
+model OtpCode {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type      String   // "email" | "phone" | "mfa_setup"
+  code      String
+  expiresAt DateTime
+  usedAt    DateTime?
+  attempts  Int      @default(0)
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([code])
+}
+
+model NotificationSettings {
+  id              String  @id @default(uuid())
+  userId          String  @unique
+  user            User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  pushEnabled     Boolean @default(true)
+  emailEnabled    Boolean @default(true)
+  smsEnabled      Boolean @default(false)
+
+  newOfferPush    Boolean @default(true)
+  newOfferEmail   Boolean @default(true)
+  chatMessagePush Boolean @default(true)
+  marketingEmail  Boolean @default(false)
+
+  updatedAt       DateTime @updatedAt
+}
+
+// ─── Legal & GDPR ─────────────────────────────────────────────────────────────
+
+model ConsentRecord {
+  id          String   @id @default(uuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  consentType String   // "privacy_policy", "agb", "marketing", etc.
+  version     String
+  acceptedAt  DateTime @default(now())
+  ipAddress   String
+  userAgent   String?
+  withdrawn   Boolean  @default(false)
+  withdrawnAt DateTime?
+
+  @@index([userId])
+  @@index([consentType])
+}
+
+model LegalDocument {
+  id          String   @id @default(uuid())
+  type        String   // "agb", "impressum", "privacy_policy", "cancellation", etc.
+  version     String
+  title       String
+  content     String   @db.Text
+  isActive    Boolean  @default(false)
+  publishedAt DateTime?
+  createdAt   DateTime @default(now())
+  createdById String
+
+  @@index([type, isActive])
+}
+
+// ─── Commission Rules ─────────────────────────────────────────────────────────
+
+model CommissionRule {
+  id          String   @id @default(uuid())
+  categoryId  String?
+  category    Category? @relation(fields: [categoryId], references: [id])
+  cityCode    String?  // city or PLZ prefix
+  rate        Float    // e.g., 0.15 = 15%
+  minimumAmount Float  @default(1.00)
+  isGlobal    Boolean  @default(false)
+  isActive    Boolean  @default(true)
+  createdById String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([categoryId])
+  @@index([isActive])
+}
+
+// ─── Audit Log ────────────────────────────────────────────────────────────────
+
+model AuditLog {
+  id          String   @id @default(uuid())
+  userId      String?  // who performed the action
+  user        User?    @relation("AuditLogAdmin", fields: [userId], references: [id])
+  targetUserId String? // who was acted upon
+  targetUser  User?    @relation("AuditLogUser", fields: [targetUserId], references: [id])
+  actionType  String   // e.g., "USER_SUSPENDED", "DISPUTE_RESOLVED", "COMMISSION_UPDATED"
+  targetEntity String? // e.g., "User", "Order", "Dispute"
+  targetId    String?
+  metadata    Json?
+  ipAddress   String?
+  createdAt   DateTime @default(now())
+
+  @@index([userId])
+  @@index([targetUserId])
+  @@index([actionType])
+  @@index([createdAt])
+}
+
+// ─── Support Tickets ──────────────────────────────────────────────────────────
+
+model SupportTicket {
+  id          String   @id @default(uuid())
+  userId      String
+  subject     String
+  description String   @db.Text
+  status      String   @default("OPEN") // OPEN, IN_PROGRESS, RESOLVED, CLOSED
+  assignedToId String?
+  orderId     String?
+
+  messages    SupportMessage[]
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([userId])
+  @@index([status])
+  @@index([assignedToId])
+}
+
+model SupportMessage {
+  id        String        @id @default(uuid())
+  ticketId  String
+  ticket    SupportTicket @relation(fields: [ticketId], references: [id])
+  senderId  String
+  content   String        @db.Text
+  isInternal Boolean      @default(false)
+  createdAt DateTime      @default(now())
+
+  @@index([ticketId])
+}

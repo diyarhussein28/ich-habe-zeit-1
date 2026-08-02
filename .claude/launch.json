@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "admin-dev",
+      "runtimeExecutable": "C:\\Users\\andrew.bekhiet\\app-test-claude\\admin\\start-dev.bat",
+      "runtimeArgs": [],
+      "port": 5173
+    }
+  ]
+}
