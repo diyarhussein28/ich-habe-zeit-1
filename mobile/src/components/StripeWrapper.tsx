@@ -1,3 +1,3 @@
-export function StripeWrapper({ children }: { children: React.ReactNode }) {
+export function StripeWrapper({ children }: { children: React.ReactElement | React.ReactElement[] }) {
   return <>{children}</>
 }

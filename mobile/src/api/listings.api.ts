@@ -15,7 +15,7 @@ export interface ServiceListing {
   viewCount: number
   createdAt: string
   updatedAt: string
-  category?: { id: string; name: string; iconUrl?: string }
+  category?: { id: string; name: string; icon?: string }
   provider?: {
     id: string
     bio?: string

@@ -16,6 +16,7 @@ import { Badge } from '../../../src/components/ui/Badge'
 import { getApiErrorMessage } from '../../../src/api/client'
 import { colors, spacing, fontSize, fontWeight } from '../../../src/constants/theme'
 import type { Offer } from '../../../src/api/types'
+import { formatDate } from '../../../src/utils/date'
 
 const STATUS_LABEL: Record<string, string> = {
   PENDING: 'Ausstehend',
@@ -99,7 +100,7 @@ function OfferCard({ offer, onWithdraw }: { offer: Offer; onWithdraw?: () => voi
       <Text style={styles.message} numberOfLines={3}>{offer.scopeOfWork ?? offer.message ?? ''}</Text>
       <View style={styles.cardFooter}>
         <Text style={styles.date}>
-          Gültig bis: {new Date(offer.validUntil).toLocaleDateString('de-DE')}
+          Gültig bis: {formatDate(offer.validUntil)}
         </Text>
         {onWithdraw ? (
           <TouchableOpacity onPress={onWithdraw}>

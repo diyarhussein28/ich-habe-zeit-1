@@ -20,6 +20,7 @@ import { StarRating } from '../../../src/components/ui/StarRating'
 import { getApiErrorMessage } from '../../../src/api/client'
 import { colors, spacing, fontSize, fontWeight, radius, shadow } from '../../../src/constants/theme'
 import type { Offer } from '../../../src/api/types'
+import { formatDate } from '../../../src/utils/date'
 
 const STATUS_LABEL: Record<string, string> = {
   DRAFT: 'Entwurf',
@@ -132,7 +133,7 @@ export default function RequestDetailScreen() {
           <MetaChip icon="📍" text={`${request.addressCity ?? request.city ?? ''} ${request.plz}`} />
           {(request.budgetMin ?? request.budget) ? <MetaChip icon="💶" text={`bis ${(request.budgetMin ?? request.budget)!.toFixed(0)} €`} /> : null}
           {(request.preferredDateStart ?? request.scheduledAt) ? (
-            <MetaChip icon="📅" text={new Date((request.preferredDateStart ?? request.scheduledAt)!).toLocaleDateString('de-DE')} />
+            <MetaChip icon="📅" text={formatDate((request.preferredDateStart ?? request.scheduledAt)!)} />
           ) : null}
         </View>
 
@@ -291,7 +292,7 @@ function OfferCard({
 
       <View style={offerStyles.footer}>
         <Text style={offerStyles.validity}>
-          Gültig bis {new Date(offer.validUntil).toLocaleDateString('de-DE')}
+          Gültig bis {formatDate(offer.validUntil)}
         </Text>
         {canAccept && (
           <TouchableOpacity onPress={onAccept} style={offerStyles.acceptBtn}>

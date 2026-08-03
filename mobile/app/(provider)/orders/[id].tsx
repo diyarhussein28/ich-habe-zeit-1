@@ -9,6 +9,8 @@ import {
   ActivityIndicator,
   Modal,
   TextInput,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native'
 import { useLocalSearchParams, useRouter } from 'expo-router'
 import { SafeAreaView } from 'react-native-safe-area-context'
@@ -21,6 +23,7 @@ import { Button } from '../../../src/components/ui/Button'
 import { StarRating } from '../../../src/components/ui/StarRating'
 import { getApiErrorMessage } from '../../../src/api/client'
 import { colors, spacing, fontSize, fontWeight, radius } from '../../../src/constants/theme'
+import { formatDate } from '../../../src/utils/date'
 
 const STATUS_LABEL: Record<string, string> = {
   AWAITING_PAYMENT: 'Warte auf Kundenzahlung',
@@ -115,15 +118,15 @@ export default function ProviderOrderDetailScreen() {
           {order.request?.title ?? `Auftrag #${id.slice(-6)}`}
         </Text>
         <Text style={styles.date}>
-          Erstellt am {new Date(order.createdAt).toLocaleDateString('de-DE')}
+          Erstellt am {formatDate(order.createdAt)}
         </Text>
 
         {/* Earnings */}
         <Card style={[styles.card, styles.earningsCard]}>
           <Text style={styles.earningsLabel}>Deine Auszahlung</Text>
-          <Text style={styles.earningsAmount}>{order.providerAmount.toFixed(2)} €</Text>
+          <Text style={styles.earningsAmount}>{(order.providerAmount ?? 0).toFixed(2)} €</Text>
           <Text style={styles.earningsNote}>
-            (nach Plattformgebühr {order.platformFee.toFixed(2)} €)
+            (nach Plattformgebühr {(order.platformFee ?? 0).toFixed(2)} €)
           </Text>
         </Card>
 
@@ -200,16 +203,16 @@ export default function ProviderOrderDetailScreen() {
         {/* Amounts breakdown */}
         <Card style={styles.card}>
           <Text style={styles.sectionLabel}>Zahlungsdetails</Text>
-          <AmountRow label="Angebotspreis" value={`${order.totalAmount.toFixed(2)} €`} />
-          <AmountRow label="Plattformgebühr" value={`- ${order.platformFee.toFixed(2)} €`} />
+          <AmountRow label="Angebotspreis" value={`${(order.totalAmount ?? 0).toFixed(2)} €`} />
+          <AmountRow label="Plattformgebühr" value={`- ${(order.platformFee ?? 0).toFixed(2)} €`} />
           <View style={styles.divider} />
-          <AmountRow label="Netto-Auszahlung" value={`${order.providerAmount.toFixed(2)} €`} bold />
+          <AmountRow label="Netto-Auszahlung" value={`${(order.providerAmount ?? 0).toFixed(2)} €`} bold />
         </Card>
       </ScrollView>
 
       {/* Rating modal */}
       <Modal visible={showRatingModal} animationType="slide" transparent onRequestClose={() => setShowRatingModal(false)}>
-        <View style={styles.modalOverlay}>
+        <KeyboardAvoidingView style={styles.modalOverlay} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
           <View style={styles.modalSheet}>
             <Text style={styles.modalTitle}>Auftraggeber bewerten</Text>
             <Text style={styles.modalSubtitle}>{customerFirstName} bewerten</Text>
@@ -240,7 +243,7 @@ export default function ProviderOrderDetailScreen() {
               />
             </View>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
     </SafeAreaView>
   )

@@ -9,6 +9,8 @@ import {
   ActivityIndicator,
   Modal,
   TextInput,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useRouter } from 'expo-router'
@@ -22,6 +24,7 @@ import { useAuthStore } from '../../src/store/auth.store'
 import { getApiErrorMessage } from '../../src/api/client'
 import { colors, spacing, fontSize, fontWeight, radius } from '../../src/constants/theme'
 import type { ServiceRequest } from '../../src/api/types'
+import { formatDate } from '../../src/utils/date'
 
 export default function ProviderFeedScreen() {
   const { user } = useAuthStore()
@@ -121,7 +124,10 @@ export default function ProviderFeedScreen() {
         transparent
         onRequestClose={() => setSelectedRequest(null)}
       >
-        <View style={styles.modalOverlay}>
+        <KeyboardAvoidingView
+          style={styles.modalOverlay}
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        >
           <View style={styles.modalSheet}>
             <Text style={styles.modalTitle}>Angebot erstellen</Text>
             <Text style={styles.modalSubtitle} numberOfLines={2}>
@@ -177,7 +183,7 @@ export default function ProviderFeedScreen() {
               />
             </View>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
     </SafeAreaView>
   )
@@ -206,7 +212,7 @@ function FeedCard({
       <Text style={styles.cardDesc} numberOfLines={3}>{request.description}</Text>
       <View style={styles.cardFooter}>
         <Text style={styles.postedAt}>
-          {new Date(request.createdAt).toLocaleDateString('de-DE')}
+          {formatDate(request.createdAt)}
         </Text>
         {alreadyOffered ? (
           <View style={styles.offeredBadge}>

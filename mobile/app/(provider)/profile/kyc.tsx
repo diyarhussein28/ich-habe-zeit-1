@@ -101,7 +101,7 @@ export default function KycScreen() {
         await kycApi.uploadDocument(slot.type, img.uri, img.mimeType)
       }
       const res = await kycApi.submitForReview()
-      updateUser({ verificationStatus: res.data.verificationStatus as any })
+      updateUser({ verificationStatus: res.data.verificationStatus })
       qc.invalidateQueries({ queryKey: ['provider-profile'] })
 
       Alert.alert(

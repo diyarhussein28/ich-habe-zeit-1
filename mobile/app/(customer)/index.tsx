@@ -21,6 +21,7 @@ import { Button } from '../../src/components/ui/Button'
 import { useAuthStore } from '../../src/store/auth.store'
 import { colors, spacing, fontSize, fontWeight, radius } from '../../src/constants/theme'
 import type { ServiceCategory, Order } from '../../src/api/types'
+import { formatDate } from '../../src/utils/date'
 
 export default function CustomerHomeScreen() {
   const router = useRouter()
@@ -172,7 +173,7 @@ function RecentOrderCard({
           <Text style={styles.recentAmount}>{amount} €</Text>
           <Text style={styles.recentStatus}>{STATUS_LABEL[order.status] ?? order.status}</Text>
         </View>
-        <Text style={styles.recentDate}>{new Date(order.createdAt).toLocaleDateString('de-DE')}</Text>
+        <Text style={styles.recentDate}>{formatDate(order.createdAt)}</Text>
       </TouchableOpacity>
       <TouchableOpacity onPress={onRepeat} style={styles.repeatBtn}>
         <Text style={styles.repeatBtnText}>↩ Wiederholen</Text>

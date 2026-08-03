@@ -17,6 +17,7 @@ import * as SecureStore from 'expo-secure-store'
 import { invoicesApi, type Invoice } from '../../../src/api/invoices.api'
 import { TOKEN_KEY } from '../../../src/api/client'
 import { colors, spacing, fontSize, fontWeight, radius } from '../../../src/constants/theme'
+import { formatDate } from '../../../src/utils/date'
 
 const BASE_URL = process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:3000'
 
@@ -27,9 +28,6 @@ const TYPE_LABEL: Record<string, string> = {
 
 const eur = (n: number) =>
   n.toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' €'
-
-const de = (d: string) =>
-  new Date(d).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' })
 
 export default function InvoicesScreen() {
   const router = useRouter()
@@ -152,7 +150,7 @@ function InvoiceCard({
       <View style={cardStyles.row}>
         <View>
           <Text style={cardStyles.metaLabel}>Datum</Text>
-          <Text style={cardStyles.metaValue}>{de(invoice.issueDate)}</Text>
+          <Text style={cardStyles.metaValue}>{formatDate(invoice.issueDate)}</Text>
         </View>
         <View style={{ alignItems: 'flex-end' }}>
           <Text style={cardStyles.metaLabel}>Gesamtbetrag</Text>

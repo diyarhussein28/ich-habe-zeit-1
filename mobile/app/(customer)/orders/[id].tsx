@@ -10,6 +10,7 @@ import {
   Modal,
   TextInput,
   Platform,
+  KeyboardAvoidingView,
 } from 'react-native'
 import { useLocalSearchParams, useRouter } from 'expo-router'
 import { SafeAreaView } from 'react-native-safe-area-context'
@@ -22,6 +23,8 @@ import { Button } from '../../../src/components/ui/Button'
 import { StarRating } from '../../../src/components/ui/StarRating'
 import { getApiErrorMessage } from '../../../src/api/client'
 import { colors, spacing, fontSize, fontWeight, radius } from '../../../src/constants/theme'
+import { formatDate } from '../../../src/utils/date'
+import { useStripe } from '@stripe/stripe-react-native'
 
 const STATUS_LABEL: Record<string, string> = {
   AWAITING_PAYMENT: 'Zahlung ausstehend',
@@ -50,6 +53,7 @@ export default function CustomerOrderDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>()
   const router = useRouter()
   const qc = useQueryClient()
+  const { initPaymentSheet, presentPaymentSheet } = useStripe()
   const [showPayModal, setShowPayModal] = useState(false)
   const [showDisputeModal, setShowDisputeModal] = useState(false)
   const [disputeReason, setDisputeReason] = useState('')
@@ -85,10 +89,8 @@ export default function CustomerOrderDetailScreen() {
         setShowPayModal(false)
         setPaySuccess(true)
       } else {
-        // Native: use Stripe PaymentSheet (imported lazily to avoid web crash)
-        // eslint-disable-next-line @typescript-eslint/no-var-requires
-        const { useStripe } = require('@stripe/stripe-react-native')
-        const { initPaymentSheet, presentPaymentSheet } = useStripe()
+        // Native: use Stripe PaymentSheet (useStripe called at top level of the
+        // component; Metro aliases the whole module to a safe no-op on web)
         const { data } = await ordersApi.initPayment(id)
         const { clientSecret, paymentIntentId } = data
         const { error: initError } = await initPaymentSheet({
@@ -183,7 +185,7 @@ export default function CustomerOrderDetailScreen() {
           {order.request?.title ?? `Buchung #${id.slice(-6)}`}
         </Text>
         <Text style={styles.date}>
-          Erstellt am {new Date(order.createdAt).toLocaleDateString('de-DE')}
+          Erstellt am {formatDate(order.createdAt)}
         </Text>
 
         {/* Provider card */}
@@ -335,7 +337,7 @@ export default function CustomerOrderDetailScreen() {
 
       {/* Dispute modal */}
       <Modal visible={showDisputeModal} animationType="slide" transparent onRequestClose={() => setShowDisputeModal(false)}>
-        <View style={styles.modalOverlay}>
+        <KeyboardAvoidingView style={styles.modalOverlay} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
           <View style={styles.modalSheet}>
             <Text style={styles.modalTitle}>Streitfall eröffnen</Text>
             <Text style={styles.modalSubtitle}>
@@ -369,12 +371,12 @@ export default function CustomerOrderDetailScreen() {
               />
             </View>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
 
       {/* Rating modal */}
       <Modal visible={showRatingModal} animationType="slide" transparent onRequestClose={() => setShowRatingModal(false)}>
-        <View style={styles.modalOverlay}>
+        <KeyboardAvoidingView style={styles.modalOverlay} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
           <View style={styles.modalSheet}>
             <Text style={styles.modalTitle}>Bewertung abgeben</Text>
             <Text style={styles.modalSubtitle}>{providerName} bewerten</Text>
@@ -405,7 +407,7 @@ export default function CustomerOrderDetailScreen() {
               />
             </View>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
     </SafeAreaView>
   )

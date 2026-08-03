@@ -15,6 +15,7 @@ import { Card } from '../../../src/components/ui/Card'
 import { Badge } from '../../../src/components/ui/Badge'
 import { colors, spacing, fontSize, fontWeight } from '../../../src/constants/theme'
 import type { Order } from '../../../src/api/types'
+import { formatDate } from '../../../src/utils/date'
 
 const STATUS_LABEL: Record<string, string> = {
   AWAITING_PAYMENT: 'Zahlung ausstehend',
@@ -93,7 +94,7 @@ function OrderCard({ order }: { order: Order }) {
       <View style={styles.cardMeta}>
         <Text style={styles.metaItem}>💶 {(order.totalAmount ?? order.grossAmount ?? 0).toFixed(2)} €</Text>
         <Text style={styles.metaItem}>
-          📅 {new Date(order.createdAt).toLocaleDateString('de-DE')}
+          📅 {formatDate(order.createdAt)}
         </Text>
       </View>
     </Card>

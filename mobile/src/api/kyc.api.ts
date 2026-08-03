@@ -1,4 +1,5 @@
 import { apiClient } from './client'
+import type { VerificationStatus } from './types'
 
 export type KycDocumentType = 'ID_FRONT' | 'ID_BACK' | 'SELFIE_WITH_ID'
 
@@ -28,5 +29,5 @@ export const kycApi = {
     apiClient.delete(`/api/kyc/documents/${id}`),
 
   submitForReview: () =>
-    apiClient.post<{ verificationStatus: string }>('/api/kyc/submit'),
+    apiClient.post<{ verificationStatus: VerificationStatus }>('/api/kyc/submit'),
 }
