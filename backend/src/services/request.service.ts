@@ -129,7 +129,7 @@ export async function listRequests(filter: ListRequestsFilter = {}) {
     prisma.serviceRequest.findMany({
       where,
       include: {
-        category: { select: { id: true, name: true, slug: true, iconUrl: true } },
+        category: { select: { id: true, name: true, slug: true, icon: true } },
         _count: { select: { offers: true } },
       },
       orderBy: [{ urgency: 'desc' }, { createdAt: 'desc' }],
@@ -175,7 +175,7 @@ export async function listProviderFeed(providerUserId: string, limit = 20, offse
     prisma.serviceRequest.findMany({
       where,
       include: {
-        category: { select: { id: true, name: true, slug: true, iconUrl: true } },
+        category: { select: { id: true, name: true, slug: true, icon: true } },
         customer: { include: { user: { select: { displayName: true, profilePhotoUrl: true } } } },
         _count: { select: { offers: true } },
         offers: {

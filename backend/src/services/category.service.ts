@@ -28,7 +28,7 @@ export async function createCategory(data: {
   name: string
   slug: string
   description?: string
-  iconUrl?: string
+  icon?: string
   parentId?: string
   commissionRate?: number
   geoRestrictions?: string[]
@@ -51,7 +51,7 @@ export async function createCategory(data: {
 export async function updateCategory(id: string, data: Partial<{
   name: string
   description: string
-  iconUrl: string
+  icon: string
   commissionRate: number
   geoRestrictions: string[]
   customFields: unknown

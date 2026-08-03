@@ -45,7 +45,7 @@ export async function listingRoutes(app: FastifyInstance) {
       prisma.serviceListing.findMany({
         where,
         include: {
-          category: { select: { id: true, name: true, iconUrl: true } },
+          category: { select: { id: true, name: true, icon: true } },
           provider: {
             include: {
               user: { select: { id: true, displayName: true, profilePhotoUrl: true } },
@@ -69,7 +69,7 @@ export async function listingRoutes(app: FastifyInstance) {
     const listing = await prisma.serviceListing.findUnique({
       where: { id },
       include: {
-        category: { select: { id: true, name: true, iconUrl: true } },
+        category: { select: { id: true, name: true, icon: true } },
         provider: {
           include: {
             user: { select: { id: true, displayName: true, profilePhotoUrl: true } },
@@ -114,7 +114,7 @@ export async function listingRoutes(app: FastifyInstance) {
         photoUrls: body.data.photoUrls ?? [],
       },
       include: {
-        category: { select: { id: true, name: true, iconUrl: true } },
+        category: { select: { id: true, name: true, icon: true } },
       },
     })
 
@@ -139,7 +139,7 @@ export async function listingRoutes(app: FastifyInstance) {
     const updated = await prisma.serviceListing.update({
       where: { id },
       data: body.data,
-      include: { category: { select: { id: true, name: true, iconUrl: true } } },
+      include: { category: { select: { id: true, name: true, icon: true } } },
     })
 
     return reply.send({ listing: updated })

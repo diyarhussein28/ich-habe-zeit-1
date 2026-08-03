@@ -23,7 +23,7 @@ export async function getProviderProfile(userId: string) {
       serviceAreas: { orderBy: { createdAt: 'asc' } },
       providerCategories: {
         include: {
-          category: { select: { id: true, name: true, slug: true, iconUrl: true } },
+          category: { select: { id: true, name: true, slug: true, icon: true } },
         },
       },
     },
@@ -178,7 +178,7 @@ export async function setProviderCategories(userId: string, categoryIds: string[
     return tx.providerCategory.findMany({
       where: { providerProfileId: profile.id },
       include: {
-        category: { select: { id: true, name: true, slug: true, iconUrl: true } },
+        category: { select: { id: true, name: true, slug: true, icon: true } },
       },
     })
   })
@@ -214,7 +214,7 @@ export async function getPublicProfile(providerProfileId: string) {
       },
       providerCategories: {
         include: {
-          category: { select: { id: true, name: true, slug: true, iconUrl: true } },
+          category: { select: { id: true, name: true, slug: true, icon: true } },
         },
       },
       ratings: {

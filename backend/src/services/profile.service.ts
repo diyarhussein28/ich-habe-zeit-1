@@ -11,7 +11,7 @@ export async function getMyProfile(userId: string) {
         include: {
           serviceAreas: true,
           providerCategories: {
-            include: { category: { select: { id: true, name: true, slug: true, iconUrl: true } } },
+            include: { category: { select: { id: true, name: true, slug: true, icon: true } } },
           },
         },
       },

@@ -259,7 +259,7 @@ model Category {
   name             String
   slug             String     @unique
   description      String?
-  iconUrl          String?
+  icon             String?
   parentId         String?
   parent           Category?  @relation("CategoryChildren", fields: [parentId], references: [id])
   children         Category[] @relation("CategoryChildren")

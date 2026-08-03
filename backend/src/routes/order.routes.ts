@@ -28,6 +28,11 @@ const resolveDisputeSchema = z.object({
   releasedAmount: z.number().positive().optional(),
 })
 
+const submitRatingSchema = z.object({
+  rating: z.number().int().min(1).max(5),
+  comment: z.string().max(1000).optional(),
+})
+
 export async function orderRoutes(app: FastifyInstance) {
   // POST /orders — accept offer → creates order
   app.post('/', { preHandler: requireVerified }, async (request, reply) => {
@@ -337,6 +342,71 @@ export async function orderRoutes(app: FastifyInstance) {
         ...body.data,
       })
       return reply.send({ dispute })
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'ERROR'
+      return reply.status(400).send({ error: msg })
+    }
+  })
+
+  // POST /orders/:id/rate — customer rates provider, or provider rates customer
+  app.post('/:id/rate', { preHandler: requireVerified }, async (request, reply) => {
+    const { id } = request.params as { id: string }
+    const body = submitRatingSchema.safeParse(request.body)
+    if (!body.success) return reply.status(400).send({ error: 'VALIDATION_ERROR', details: body.error.flatten() })
+
+    const order = await prisma.order.findUnique({
+      where: { id },
+      include: { offer: { include: { provider: true } } },
+    })
+    if (!order) return reply.status(404).send({ error: 'ORDER_NOT_FOUND' })
+
+    const isCustomer = order.customerId === request.userId
+    const isProvider = order.offer.provider.userId === request.userId
+    if (!isCustomer && !isProvider) return reply.status(403).send({ error: 'FORBIDDEN' })
+
+    try {
+      let rating
+      if (isCustomer) {
+        const customerProfile = await prisma.customerProfile.findUnique({ where: { userId: request.userId } })
+        if (!customerProfile) return reply.status(400).send({ error: 'NO_CUSTOMER_PROFILE' })
+
+        const existing = await prisma.rating.findFirst({
+          where: { orderId: id, customerRaterId: customerProfile.id },
+        })
+        if (existing) return reply.status(409).send({ error: 'ALREADY_RATED' })
+
+        rating = await prisma.rating.create({
+          data: {
+            orderId: id,
+            customerRaterId: customerProfile.id,
+            providerReceiverId: order.offer.providerId,
+            score: body.data.rating,
+            comment: body.data.comment,
+          },
+        })
+      } else {
+        const providerProfile = await prisma.providerProfile.findUnique({ where: { userId: request.userId } })
+        if (!providerProfile) return reply.status(400).send({ error: 'NO_PROVIDER_PROFILE' })
+
+        const customerProfile = await prisma.customerProfile.findUnique({ where: { userId: order.customerId } })
+        if (!customerProfile) return reply.status(400).send({ error: 'CUSTOMER_HAS_NO_PROFILE' })
+
+        const existing = await prisma.rating.findFirst({
+          where: { orderId: id, providerRaterId: providerProfile.id },
+        })
+        if (existing) return reply.status(409).send({ error: 'ALREADY_RATED' })
+
+        rating = await prisma.rating.create({
+          data: {
+            orderId: id,
+            providerRaterId: providerProfile.id,
+            customerReceiverId: customerProfile.id,
+            score: body.data.rating,
+            comment: body.data.comment,
+          },
+        })
+      }
+      return reply.send({ rating })
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'ERROR'
       return reply.status(400).send({ error: msg })

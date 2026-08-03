@@ -2,6 +2,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import type { FastifyInstance } from 'fastify'
 import { z } from 'zod'
+import { OrderStatus } from '@prisma/client'
 import type { Prisma } from '@prisma/client'
 import { prisma } from '../config/prisma.js'
 import { requireRole } from '../middleware/auth.middleware.js'
@@ -34,8 +35,11 @@ async function writeAuditLog(
   })
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function mapCommissionRule(rule: any) {
+type CommissionRuleWithCategory = Prisma.CommissionRuleGetPayload<{
+  include: { category: { select: { id: true; name: true; slug: true } } }
+}>
+
+function mapCommissionRule(rule: CommissionRuleWithCategory) {
   return {
     id: rule.id,
     scope: rule.isGlobal ? 'GLOBAL' : rule.cityCode ? 'CITY' : 'CATEGORY',
@@ -255,8 +259,7 @@ export async function adminRoutes(app: FastifyInstance) {
       }
 
       try {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const updated = await updateKycStatus(id, body.data.status as any, request.userId, body.data.notes)
+        const updated = await updateKycStatus(id, body.data.status, request.userId, body.data.notes)
 
         const pushType =
           body.data.status === 'KYC_VERIFIED'
@@ -490,17 +493,17 @@ export async function adminRoutes(app: FastifyInstance) {
   app.get('/orders', { preHandler: requireRole('ADMIN') }, async (request, reply) => {
     const query = z
       .object({
-        status: z.string().optional(),
+        status: z.nativeEnum(OrderStatus).optional(),
         limit: z.coerce.number().int().min(1).max(100).default(25),
         page: z.coerce.number().int().min(1).default(1),
       })
-      .parse(request.query)
+      .safeParse(request.query)
+    if (!query.success) return reply.status(400).send({ error: 'VALIDATION_ERROR', details: query.error.flatten() })
 
     const where: Prisma.OrderWhereInput = {}
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    if (query.status) where.status = query.status as any
+    if (query.data.status) where.status = query.data.status
 
-    const offset = (query.page - 1) * query.limit
+    const offset = (query.data.page - 1) * query.data.limit
 
     const [total, orders] = await Promise.all([
       prisma.order.count({ where }),
@@ -524,7 +527,7 @@ export async function adminRoutes(app: FastifyInstance) {
           },
         },
         orderBy: { createdAt: 'desc' },
-        take: query.limit,
+        take: query.data.limit,
         skip: offset,
       }),
     ])
@@ -556,7 +559,7 @@ export async function adminRoutes(app: FastifyInstance) {
       },
     }))
 
-    return reply.send({ data, total, hasMore: offset + query.limit < total })
+    return reply.send({ data, total, hasMore: offset + query.data.limit < total })
   })
 
   // ── Disputes ─────────────────────────────────────────────────────────────
@@ -767,7 +770,7 @@ export async function adminRoutes(app: FastifyInstance) {
         name: body.data.name,
         slug,
         description: body.data.description,
-        iconUrl: body.data.icon,
+        icon: body.data.icon,
         parentId: body.data.parentId,
       },
     })
@@ -794,7 +797,7 @@ export async function adminRoutes(app: FastifyInstance) {
       data: {
         ...(body.data.name !== undefined && { name: body.data.name }),
         ...(body.data.description !== undefined && { description: body.data.description }),
-        ...(body.data.icon !== undefined && { iconUrl: body.data.icon }),
+        ...(body.data.icon !== undefined && { icon: body.data.icon }),
         ...(body.data.isActive !== undefined && { isActive: body.data.isActive }),
       },
     })

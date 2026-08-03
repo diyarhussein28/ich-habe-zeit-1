@@ -361,7 +361,7 @@ export async function listOrdersForUser(userId: string, status?: OrderStatus) {
       ...(status ? { status } : {}),
     },
     include: {
-      request: { include: { category: { select: { id: true, name: true, iconUrl: true } } } },
+      request: { include: { category: { select: { id: true, name: true, icon: true } } } },
       offer: {
         include: {
           provider: {
@@ -384,7 +384,7 @@ export async function listOrdersForProvider(providerUserId: string, status?: Ord
       ...(status ? { status } : {}),
     },
     include: {
-      request: { include: { category: { select: { id: true, name: true, iconUrl: true } } } },
+      request: { include: { category: { select: { id: true, name: true, icon: true } } } },
       offer: true,
       customer: { select: { id: true, displayName: true, profilePhotoUrl: true } },
     },

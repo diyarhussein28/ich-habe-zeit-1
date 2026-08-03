@@ -3,16 +3,16 @@ import bcrypt from 'bcryptjs'
 import { prisma } from '../config/prisma.js'
 
 const MVP_CATEGORIES = [
-  { name: 'Sanitär & Klempner', slug: 'plumbing', description: 'Leitungen, Armaturen, Badezimmer', sortOrder: 1 },
-  { name: 'Malerarbeiten', slug: 'painting', description: 'Wände, Decken, Holzwerk', sortOrder: 2 },
-  { name: 'Reinigung', slug: 'cleaning', description: 'Wohnung, Büro, Fenster, Baureinigung', sortOrder: 3 },
-  { name: 'Umzugshilfe', slug: 'moving', description: 'Packen, Tragen, Möbelaufbau', sortOrder: 4 },
-  { name: 'Schreinerarbeiten', slug: 'carpentry', description: 'Möbelreparatur, Regale, Holzarbeiten', sortOrder: 5 },
-  { name: 'Elektroarbeiten', slug: 'electrical', description: 'Steckdosen, Beleuchtung, kleine Reparaturen', sortOrder: 6 },
-  { name: 'Gartenarbeit', slug: 'gardening', description: 'Mähen, Beschneiden, Landschaftsgestaltung', sortOrder: 7 },
-  { name: 'Haushaltsreparaturen', slug: 'home-maintenance', description: 'Handwerkeraufgaben, kleine Reparaturen', sortOrder: 8 },
-  { name: 'Nachhilfe & Bildung', slug: 'tutoring', description: 'Schulfächer, Sprachen, Musik', sortOrder: 9 },
-  { name: 'Besorgungen & Botengänge', slug: 'errands', description: 'Einkaufen, Lieferungen, Warteschlange', sortOrder: 10 },
+  { name: 'Sanitär & Klempner', slug: 'plumbing', description: 'Leitungen, Armaturen, Badezimmer', sortOrder: 1, icon: '🚿' },
+  { name: 'Malerarbeiten', slug: 'painting', description: 'Wände, Decken, Holzwerk', sortOrder: 2, icon: '🎨' },
+  { name: 'Reinigung', slug: 'cleaning', description: 'Wohnung, Büro, Fenster, Baureinigung', sortOrder: 3, icon: '🧹' },
+  { name: 'Umzugshilfe', slug: 'moving', description: 'Packen, Tragen, Möbelaufbau', sortOrder: 4, icon: '🚚' },
+  { name: 'Schreinerarbeiten', slug: 'carpentry', description: 'Möbelreparatur, Regale, Holzarbeiten', sortOrder: 5, icon: '🪚' },
+  { name: 'Elektroarbeiten', slug: 'electrical', description: 'Steckdosen, Beleuchtung, kleine Reparaturen', sortOrder: 6, icon: '💡' },
+  { name: 'Gartenarbeit', slug: 'gardening', description: 'Mähen, Beschneiden, Landschaftsgestaltung', sortOrder: 7, icon: '🌱' },
+  { name: 'Haushaltsreparaturen', slug: 'home-maintenance', description: 'Handwerkeraufgaben, kleine Reparaturen', sortOrder: 8, icon: '🛠️' },
+  { name: 'Nachhilfe & Bildung', slug: 'tutoring', description: 'Schulfächer, Sprachen, Musik', sortOrder: 9, icon: '📚' },
+  { name: 'Besorgungen & Botengänge', slug: 'errands', description: 'Einkaufen, Lieferungen, Warteschlange', sortOrder: 10, icon: '🛒' },
 ]
 
 const SUBCATEGORIES: Record<string, Array<{ name: string; slug: string; description: string }>> = {
@@ -54,7 +54,7 @@ async function seed() {
   for (const cat of MVP_CATEGORIES) {
     const parent = await prisma.category.upsert({
       where: { slug: cat.slug },
-      update: { name: cat.name, description: cat.description, sortOrder: cat.sortOrder },
+      update: { name: cat.name, description: cat.description, sortOrder: cat.sortOrder, icon: cat.icon },
       create: { ...cat, isActive: true },
     })
 

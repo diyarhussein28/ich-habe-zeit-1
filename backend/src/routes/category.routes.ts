@@ -8,7 +8,7 @@ const createCategorySchema = z.object({
   name: z.string().min(2).max(100),
   slug: z.string().regex(/^[a-z0-9-]+$/),
   description: z.string().optional(),
-  iconUrl: z.string().url().optional(),
+  icon: z.string().max(10).optional(),
   parentId: z.string().uuid().optional(),
   commissionRate: z.number().min(0).max(1).optional(),
   geoRestrictions: z.array(z.string()).optional(),
