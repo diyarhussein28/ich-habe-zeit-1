@@ -102,7 +102,11 @@ export async function releaseOrderPayment(orderId: string) {
     },
   })
   if (!order) throw new Error('ORDER_NOT_FOUND')
-  if (!order.mangopayPayInId) throw new Error('NO_PAYMENT_INTENT')
+
+  // Dev simulate: no real PaymentIntent — skip Stripe entirely
+  if (!order.mangopayPayInId || order.mangopayEscrowWalletId === 'simulated') {
+    return { transferId: undefined }
+  }
 
   const pi = await stripe.paymentIntents.retrieve(order.mangopayPayInId)
   if (!['requires_capture', 'succeeded'].includes(pi.status)) {
