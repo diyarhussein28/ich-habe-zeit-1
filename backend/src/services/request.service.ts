@@ -25,10 +25,11 @@ export interface CreateRequestInput {
 }
 
 export async function createRequest(input: CreateRequestInput) {
-  const customerProfile = await prisma.customerProfile.findUnique({
+  const customerProfile = await prisma.customerProfile.upsert({
     where: { userId: input.customerId },
+    create: { userId: input.customerId },
+    update: {},
   })
-  if (!customerProfile) throw new Error('CUSTOMER_PROFILE_NOT_FOUND')
 
   const category = await prisma.category.findUnique({ where: { id: input.categoryId } })
   if (!category || !category.isActive) throw new Error('CATEGORY_NOT_FOUND')
@@ -158,6 +159,7 @@ export async function listProviderFeed(providerUserId: string, limit = 20, offse
   const where: Record<string, unknown> = {
     status: { in: ['OPEN', 'OFFER_RECEIVED'] },
     expiresAt: { gt: new Date() },
+    customer: { userId: { not: providerUserId } },
   }
 
   if (categoryIds.length > 0) {

@@ -23,6 +23,9 @@ export const adminApi = {
   suspendUser: (id: string, suspended: boolean) =>
     api.patch<AdminUser>(`/api/admin/users/${id}/suspend`, { suspended }),
 
+  changeRole: (id: string, role: 'CUSTOMER' | 'PROVIDER') =>
+    api.patch<{ user: AdminUser }>(`/api/admin/users/${id}/role`, { role }),
+
   // ── Orders ─────────────────────────────────────────────────────────────
   getOrders: (params?: { page?: number; limit?: number; status?: string }) =>
     api.get<PaginatedResponse<AdminOrder>>('/api/admin/orders', { params }),

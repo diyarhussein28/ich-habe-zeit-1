@@ -27,6 +27,7 @@ export default function Users() {
   const [selectedUser, setSelectedUser] = useState<AdminUser | null>(null)
   const [kycNotes, setKycNotes] = useState('')
   const [error, setError] = useState('')
+  const [roleMsg, setRoleMsg] = useState('')
 
   const { data, isLoading } = useQuery({
     queryKey: ['admin-users', search, roleFilter, kycFilter, page],
@@ -62,11 +63,28 @@ export default function Users() {
     },
   })
 
+  const roleMutation = useMutation({
+    mutationFn: ({ id, role }: { id: string; role: 'CUSTOMER' | 'PROVIDER' }) =>
+      adminApi.changeRole(id, role),
+    onSuccess: (_data, vars) => {
+      qc.invalidateQueries({ queryKey: ['admin-users'] })
+      setRoleMsg(`Rolle erfolgreich geändert zu ${vars.role === 'PROVIDER' ? 'Dienstleister' : 'Auftraggeber'}`)
+      setTimeout(() => setRoleMsg(''), 4000)
+    },
+    onError: (err) => setRoleMsg(`Fehler: ${apiError(err)}`),
+  })
+
   const transitions = selectedUser ? (KYC_TRANSITIONS[selectedUser.verificationStatus] ?? []) : []
 
   return (
     <div className="space-y-5">
       <h1 className="text-2xl font-bold text-gray-900">Benutzer</h1>
+
+      {roleMsg && (
+        <div className={`rounded-lg px-4 py-3 text-sm font-medium ${roleMsg.startsWith('Fehler') ? 'bg-red-50 text-red-700' : 'bg-green-50 text-green-700'}`}>
+          {roleMsg}
+        </div>
+      )}
 
       {/* Filters */}
       <div className="flex flex-wrap gap-3">
@@ -133,6 +151,15 @@ export default function Users() {
                         {user.role === 'PROVIDER' && (
                           <button className="btn btn-secondary btn-sm" onClick={() => setSelectedUser(user)}>
                             KYC
+                          </button>
+                        )}
+                        {(user.role === 'CUSTOMER' || user.role === 'PROVIDER') && (
+                          <button
+                            className="btn btn-secondary btn-sm"
+                            disabled={roleMutation.isPending}
+                            onClick={() => roleMutation.mutate({ id: user.id, role: user.role === 'CUSTOMER' ? 'PROVIDER' : 'CUSTOMER' })}
+                          >
+                            → {user.role === 'CUSTOMER' ? 'Dienstleister' : 'Auftraggeber'}
                           </button>
                         )}
                         {user.verificationStatus !== 'SUSPENDED' ? (

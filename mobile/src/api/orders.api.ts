@@ -26,6 +26,9 @@ export const ordersApi = {
   cancel: (id: string) =>
     apiClient.post<Order>(`/api/orders/${id}/cancel`),
 
+  simulatePayment: (id: string) =>
+    apiClient.post<{ order: Order }>(`/api/orders/${id}/pay/simulate`),
+
   getMessages: (orderId: string, params?: { before?: string; limit?: number }) =>
     apiClient.get<PaginatedResponse<ChatMessage>>(`/api/orders/${orderId}/messages`, { params }),
 

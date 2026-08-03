@@ -58,6 +58,8 @@ export default function ProviderLayout() {
           tabBarIcon: ({ focused }) => <TabIcon emoji="👤" focused={focused} />,
         }}
       />
+      {/* Hidden — navigable via Jobbörse header link */}
+      <Tabs.Screen name="requests/index" options={{ href: null }} />
     </Tabs>
   )
 }

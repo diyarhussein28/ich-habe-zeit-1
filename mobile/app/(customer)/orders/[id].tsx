@@ -9,11 +9,11 @@ import {
   ActivityIndicator,
   Modal,
   TextInput,
+  Platform,
 } from 'react-native'
 import { useLocalSearchParams, useRouter } from 'expo-router'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { useStripe } from '@stripe/stripe-react-native'
 import { ordersApi } from '../../../src/api/orders.api'
 import { ratingsApi } from '../../../src/api/ratings.api'
 import { Card } from '../../../src/components/ui/Card'
@@ -57,52 +57,59 @@ export default function CustomerOrderDetailScreen() {
   const [rating, setRating] = useState(0)
   const [ratingComment, setRatingComment] = useState('')
 
-  const { initPaymentSheet, presentPaymentSheet } = useStripe()
   const [payLoading, setPayLoading] = useState(false)
+  const [payError, setPayError] = useState<string | null>(null)
+  const [paySuccess, setPaySuccess] = useState(false)
+  const [releaseError, setReleaseError] = useState<string | null>(null)
+  const [showReleaseConfirm, setShowReleaseConfirm] = useState(false)
 
   const { data: order, isLoading } = useQuery({
     queryKey: ['order', id],
-    queryFn: () => ordersApi.get(id).then((r) => r.data),
+    queryFn: () => ordersApi.get(id).then((r) => {
+      const raw = r.data as unknown as { order?: typeof r.data }
+      return raw.order ?? r.data
+    }),
     enabled: !!id,
   })
 
   const handlePay = async () => {
     if (payLoading) return
     setPayLoading(true)
+    setPayError(null)
     try {
-      // 1. Create PaymentIntent on backend
-      const { data } = await ordersApi.initPayment(id)
-      const { clientSecret, paymentIntentId } = data
-
-      // 2. Init Stripe PaymentSheet
-      const { error: initError } = await initPaymentSheet({
-        paymentIntentClientSecret: clientSecret,
-        merchantDisplayName: 'Ich habe Zeit',
-        style: 'automatic',
-        primaryButtonLabel: `${order?.totalAmount?.toFixed(2) ?? '0.00'} € bezahlen`,
-      })
-      if (initError) {
-        Alert.alert('Fehler', initError.message)
-        return
-      }
-
-      // 3. Present the sheet — user enters card details
-      const { error: presentError } = await presentPaymentSheet()
-      if (presentError) {
-        if (presentError.code !== 'Canceled') {
-          Alert.alert('Zahlung fehlgeschlagen', presentError.message)
+      if (Platform.OS === 'web') {
+        // Web: bypass Stripe, use dev simulation endpoint
+        await ordersApi.simulatePayment(id)
+        qc.invalidateQueries({ queryKey: ['order', id] })
+        qc.invalidateQueries({ queryKey: ['customer-orders'] })
+        setShowPayModal(false)
+        setPaySuccess(true)
+      } else {
+        // Native: use Stripe PaymentSheet (imported lazily to avoid web crash)
+        // eslint-disable-next-line @typescript-eslint/no-var-requires
+        const { useStripe } = require('@stripe/stripe-react-native')
+        const { initPaymentSheet, presentPaymentSheet } = useStripe()
+        const { data } = await ordersApi.initPayment(id)
+        const { clientSecret, paymentIntentId } = data
+        const { error: initError } = await initPaymentSheet({
+          paymentIntentClientSecret: clientSecret,
+          merchantDisplayName: 'Ich habe Zeit',
+          style: 'automatic',
+        })
+        if (initError) { setPayError(initError.message); return }
+        const { error: presentError } = await presentPaymentSheet()
+        if (presentError) {
+          if (presentError.code !== 'Canceled') setPayError(presentError.message)
+          return
         }
-        return
+        await ordersApi.confirmPayment(id, paymentIntentId)
+        qc.invalidateQueries({ queryKey: ['order', id] })
+        qc.invalidateQueries({ queryKey: ['customer-orders'] })
+        setShowPayModal(false)
+        setPaySuccess(true)
       }
-
-      // 4. Confirm on backend (marks order IN_PROGRESS)
-      await ordersApi.confirmPayment(id, paymentIntentId)
-      qc.invalidateQueries({ queryKey: ['order', id] })
-      qc.invalidateQueries({ queryKey: ['customer-orders'] })
-      setShowPayModal(false)
-      Alert.alert('Zahlung erfolgreich', 'Deine Zahlung wurde gesichert. Der Auftrag ist jetzt aktiv.')
     } catch (err) {
-      Alert.alert('Fehler', getApiErrorMessage(err))
+      setPayError(getApiErrorMessage(err))
     } finally {
       setPayLoading(false)
     }
@@ -113,9 +120,8 @@ export default function CustomerOrderDetailScreen() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['order', id] })
       qc.invalidateQueries({ queryKey: ['customer-orders'] })
-      Alert.alert('Zahlung freigegeben', 'Der Betrag wurde an den Dienstleister ausgezahlt.')
     },
-    onError: (err) => Alert.alert('Fehler', getApiErrorMessage(err)),
+    onError: (err) => setReleaseError(getApiErrorMessage(err)),
   })
 
   const disputeMutation = useMutation({
@@ -205,10 +211,10 @@ export default function CustomerOrderDetailScreen() {
         {/* Amounts */}
         <Card style={styles.card}>
           <Text style={styles.sectionLabel}>Zahlungsübersicht</Text>
-          <AmountRow label="Servicebetrag" value={`${order.totalAmount.toFixed(2)} €`} />
-          <AmountRow label="Plattformgebühr" value={`${order.platformFee.toFixed(2)} €`} />
+          <AmountRow label="Servicebetrag" value={`${(order.grossAmount ?? order.totalAmount ?? 0).toFixed(2)} €`} />
+          <AmountRow label="Plattformgebühr" value={`${(order.commissionAmount ?? order.platformFee ?? 0).toFixed(2)} €`} />
           <View style={styles.divider} />
-          <AmountRow label="Gesamtbetrag" value={`${order.totalAmount.toFixed(2)} €`} bold />
+          <AmountRow label="Gesamtbetrag" value={`${(order.grossAmount ?? order.totalAmount ?? 0).toFixed(2)} €`} bold />
         </Card>
 
         {/* Release countdown */}
@@ -221,10 +227,18 @@ export default function CustomerOrderDetailScreen() {
           </Card>
         )}
 
+        {paySuccess && (
+          <Card style={[styles.card, { backgroundColor: '#F0FDF4', borderColor: '#86EFAC' }]}>
+            <Text style={{ fontSize: fontSize.md, fontWeight: fontWeight.semibold, color: '#16A34A' }}>
+              ✓ Zahlung erfolgreich gesichert! Der Auftrag ist jetzt aktiv.
+            </Text>
+          </Card>
+        )}
+
         {/* Status-specific actions */}
         {order.status === 'AWAITING_PAYMENT' && (
           <Button
-            label={`Jetzt bezahlen – ${order.totalAmount.toFixed(2)} €`}
+            label={`Jetzt bezahlen – ${(order.grossAmount ?? order.totalAmount ?? 0).toFixed(2)} €`}
             onPress={() => setShowPayModal(true)}
             style={styles.actionBtn}
           />
@@ -232,21 +246,27 @@ export default function CustomerOrderDetailScreen() {
 
         {order.status === 'AWAITING_RELEASE' && (
           <>
-            <Button
-              label="Zahlung freigeben ✓"
-              onPress={() =>
-                Alert.alert(
-                  'Zahlung freigeben',
-                  `Bist du mit der Arbeit zufrieden? Damit wird der Betrag von ${order.providerAmount.toFixed(2)} € an den Dienstleister ausgezahlt.`,
-                  [
-                    { text: 'Abbrechen', style: 'cancel' },
-                    { text: 'Freigeben', onPress: () => releaseMutation.mutate() },
-                  ],
-                )
-              }
-              loading={releaseMutation.isPending}
-              style={styles.actionBtn}
-            />
+            {showReleaseConfirm ? (
+              <Card style={[styles.card, { backgroundColor: '#F0FDF4', borderColor: '#86EFAC' }]}>
+                <Text style={{ fontSize: fontSize.md, fontWeight: fontWeight.semibold, color: colors.text, marginBottom: spacing.sm }}>
+                  Zahlung freigeben?
+                </Text>
+                <Text style={{ fontSize: fontSize.sm, color: colors.textSecondary, marginBottom: spacing.md }}>
+                  Damit wird der Betrag von {(order.netProviderAmount ?? order.providerAmount ?? 0).toFixed(2)} € an den Dienstleister ausgezahlt.
+                </Text>
+                {releaseError ? <Text style={styles.errorText}>{releaseError}</Text> : null}
+                <View style={{ flexDirection: 'row', gap: spacing.md }}>
+                  <Button label="Abbrechen" variant="outline" fullWidth={false} style={{ flex: 1 }} onPress={() => setShowReleaseConfirm(false)} />
+                  <Button label="Freigeben ✓" fullWidth={false} style={{ flex: 1 }} loading={releaseMutation.isPending} onPress={() => releaseMutation.mutate()} />
+                </View>
+              </Card>
+            ) : (
+              <Button
+                label="Zahlung freigeben ✓"
+                onPress={() => setShowReleaseConfirm(true)}
+                style={styles.actionBtn}
+              />
+            )}
             <Button
               label="Streitfall eröffnen"
               variant="danger"
@@ -287,7 +307,7 @@ export default function CustomerOrderDetailScreen() {
 
             <View style={styles.payRow}>
               <Text style={styles.payLabel}>Gesamtbetrag</Text>
-              <Text style={styles.payAmount}>{order.totalAmount.toFixed(2)} €</Text>
+              <Text style={styles.payAmount}>{(order.grossAmount ?? order.totalAmount ?? 0).toFixed(2)} €</Text>
             </View>
 
             <Card style={styles.escrowInfo}>
@@ -296,8 +316,12 @@ export default function CustomerOrderDetailScreen() {
               </Text>
             </Card>
 
+            {payError ? <Text style={styles.errorText}>{payError}</Text> : null}
+            {Platform.OS === 'web' && (
+              <Text style={styles.webSimNote}>⚠️ Web-Demo: Zahlung wird simuliert (kein echtes Stripe)</Text>
+            )}
             <View style={styles.modalActions}>
-              <Button label="Abbrechen" variant="outline" onPress={() => setShowPayModal(false)} fullWidth={false} style={styles.modalBtn} />
+              <Button label="Abbrechen" variant="outline" onPress={() => { setShowPayModal(false); setPayError(null) }} fullWidth={false} style={styles.modalBtn} />
               <Button
                 label="Jetzt bezahlen"
                 onPress={handlePay}
@@ -481,4 +505,6 @@ const styles = StyleSheet.create({
   },
   modalActions: { flexDirection: 'row', gap: spacing.md },
   modalBtn: { flex: 1 },
+  errorText: { fontSize: fontSize.sm, color: colors.error, backgroundColor: '#fee2e2', padding: spacing.sm, borderRadius: 6, marginBottom: spacing.sm },
+  webSimNote: { fontSize: fontSize.xs, color: '#92400e', backgroundColor: '#fef3c7', padding: spacing.sm, borderRadius: 6, marginBottom: spacing.sm, textAlign: 'center' },
 })

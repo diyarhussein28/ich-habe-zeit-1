@@ -58,6 +58,8 @@ export default function CustomerLayout() {
           tabBarIcon: ({ focused }) => <TabIcon emoji="👤" focused={focused} />,
         }}
       />
+      {/* Hidden routes — navigable but not shown in tab bar */}
+      <Tabs.Screen name="browse/[categoryId]" options={{ href: null }} />
     </Tabs>
   )
 }

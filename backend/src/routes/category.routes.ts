@@ -2,6 +2,7 @@ import type { FastifyInstance } from 'fastify'
 import { z } from 'zod'
 import * as categoryService from '../services/category.service.js'
 import { requireRole } from '../middleware/auth.middleware.js'
+import { prisma } from '../config/prisma.js'
 
 const createCategorySchema = z.object({
   name: z.string().min(2).max(100),
@@ -27,6 +28,34 @@ export async function categoryRoutes(app: FastifyInstance) {
     const category = await categoryService.getCategoryById(id)
     if (!category) return reply.status(404).send({ error: 'NOT_FOUND' })
     return reply.send({ category })
+  })
+
+  // GET /categories/:id/providers — public: list available verified providers for a category
+  app.get('/:id/providers', async (request, reply) => {
+    const { id } = request.params as { id: string }
+    const providerCategories = await prisma.providerCategory.findMany({
+      where: { categoryId: id, providerProfile: { isAvailable: true } },
+      include: {
+        providerProfile: {
+          include: {
+            user: { select: { id: true, displayName: true, email: true } },
+          },
+        },
+      },
+      orderBy: { providerProfile: { averageRating: 'desc' } },
+      take: 50,
+    })
+    const providers = providerCategories.map((pc) => ({
+      id: pc.providerProfile.id,
+      userId: pc.providerProfile.userId,
+      displayName: pc.providerProfile.user.displayName,
+      bio: pc.providerProfile.bio,
+      averageRating: pc.providerProfile.averageRating,
+      totalReviews: pc.providerProfile.totalReviews,
+      languages: pc.providerProfile.languages,
+      isAvailable: pc.providerProfile.isAvailable,
+    }))
+    return reply.send({ providers })
   })
 
   // POST /categories — admin only

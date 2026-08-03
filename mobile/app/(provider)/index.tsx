@@ -11,6 +11,7 @@ import {
   TextInput,
 } from 'react-native'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useRouter } from 'expo-router'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { requestsApi } from '../../src/api/requests.api'
 import { Card } from '../../src/components/ui/Card'
@@ -24,6 +25,7 @@ import type { ServiceRequest } from '../../src/api/types'
 
 export default function ProviderFeedScreen() {
   const { user } = useAuthStore()
+  const router = useRouter()
   const qc = useQueryClient()
   const [selectedRequest, setSelectedRequest] = useState<ServiceRequest | null>(null)
   const [offerPrice, setOfferPrice] = useState('')
@@ -68,6 +70,14 @@ export default function ProviderFeedScreen() {
         <View>
           <Text style={styles.greeting}>Hallo, {user?.displayName} 👋</Text>
           <Text style={styles.sub}>Neue Aufträge in deiner Region</Text>
+        </View>
+        <View style={styles.headerActions}>
+          <TouchableOpacity onPress={() => router.push('/(provider)/requests')} style={styles.myRequestsBtn}>
+            <Text style={styles.myRequestsBtnText}>Meine Anfragen</Text>
+          </TouchableOpacity>
+          <TouchableOpacity onPress={() => router.push('/(customer)/requests/create')} style={styles.postBtn}>
+            <Text style={styles.postBtnText}>+ Auftrag</Text>
+          </TouchableOpacity>
         </View>
       </View>
 
@@ -221,6 +231,11 @@ const styles = StyleSheet.create({
   },
   greeting: { fontSize: fontSize.xl, fontWeight: fontWeight.bold, color: colors.text },
   sub: { fontSize: fontSize.sm, color: colors.textSecondary, marginTop: 2 },
+  headerActions: { flexDirection: 'row', gap: spacing.sm, alignItems: 'center' },
+  myRequestsBtn: { paddingHorizontal: spacing.sm, paddingVertical: spacing.sm, borderRadius: radius.full, borderWidth: 1, borderColor: colors.primary },
+  myRequestsBtnText: { fontSize: fontSize.xs, fontWeight: fontWeight.semibold, color: colors.primary },
+  postBtn: { backgroundColor: colors.primary, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, borderRadius: radius.full },
+  postBtnText: { fontSize: fontSize.sm, fontWeight: fontWeight.semibold, color: colors.textInverse },
   list: { paddingHorizontal: spacing.lg, paddingBottom: spacing.xl },
   card: { marginBottom: spacing.md },
   cardTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: spacing.xs },

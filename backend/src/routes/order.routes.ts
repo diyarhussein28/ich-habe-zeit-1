@@ -31,7 +31,7 @@ const resolveDisputeSchema = z.object({
 export async function orderRoutes(app: FastifyInstance) {
   // POST /orders — accept offer → creates order
   app.post('/', { preHandler: requireVerified }, async (request, reply) => {
-    if (request.userRole !== 'CUSTOMER') return reply.status(403).send({ error: 'CUSTOMERS_ONLY' })
+    if (request.userRole === 'ADMIN') return reply.status(403).send({ error: 'ADMINS_CANNOT_ACCEPT_OFFERS' })
 
     const body = z.object({ offerId: z.string().uuid() }).safeParse(request.body)
     if (!body.success) return reply.status(400).send({ error: 'VALIDATION_ERROR' })
@@ -65,7 +65,17 @@ export async function orderRoutes(app: FastifyInstance) {
     const query = z.object({ status: z.string().optional() }).parse(request.query)
 
     if (request.userRole === 'PROVIDER') {
-      const orders = await orderService.listOrdersForProvider(request.userId, query.status as never)
+      // Providers see orders both as service provider AND as requester (when they post requests)
+      const [providerOrders, requesterOrders] = await Promise.all([
+        orderService.listOrdersForProvider(request.userId, query.status as never).catch(() => []),
+        orderService.listOrdersForUser(request.userId, query.status as never),
+      ])
+      const seen = new Set<string>()
+      const orders = [...providerOrders, ...requesterOrders].filter((o) => {
+        if (seen.has(o.id)) return false
+        seen.add(o.id)
+        return true
+      })
       return reply.send({ orders })
     }
 
@@ -127,6 +137,38 @@ export async function orderRoutes(app: FastifyInstance) {
     }
   })
 
+  // POST /orders/:id/pay/simulate — dev-only: mark order paid without Stripe
+  app.post('/:id/pay/simulate', { preHandler: requireAuth }, async (request, reply) => {
+    if (process.env.NODE_ENV === 'production') {
+      return reply.status(403).send({ error: 'NOT_AVAILABLE_IN_PRODUCTION' })
+    }
+    const { id } = request.params as { id: string }
+    try {
+      const order = await prisma.order.findUnique({
+        where: { id },
+      })
+      if (!order) return reply.status(404).send({ error: 'ORDER_NOT_FOUND' })
+      if (order.status !== 'AWAITING_PAYMENT') return reply.status(400).send({ error: `WRONG_STATUS: ${order.status}` })
+
+      const releaseDeadline = new Date()
+      releaseDeadline.setHours(releaseDeadline.getHours() + (order.releaseWindowHours ?? 72))
+
+      const updated = await prisma.$transaction(async (tx) => {
+        const o = await tx.order.update({
+          where: { id },
+          data: { status: 'IN_PROGRESS', paymentStatus: 'CAPTURED', releaseDeadline, mangopayEscrowWalletId: 'simulated' },
+        })
+        await tx.serviceRequest.update({ where: { id: order.requestId }, data: { status: 'IN_PROGRESS' } })
+        await tx.orderStatusHistory.create({ data: { orderId: id, status: 'IN_PROGRESS', triggeredBy: 'web_simulation' } })
+        return o
+      })
+      return reply.send({ order: updated })
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'ERROR'
+      return reply.status(400).send({ error: msg })
+    }
+  })
+
   // POST /orders/:id/complete — provider marks done
   app.post('/:id/complete', { preHandler: requireVerified }, async (request, reply) => {
     if (request.userRole !== 'PROVIDER') return reply.status(403).send({ error: 'PROVIDERS_ONLY' })
@@ -155,7 +197,7 @@ export async function orderRoutes(app: FastifyInstance) {
 
   // POST /orders/:id/release — customer releases payment
   app.post('/:id/release', { preHandler: requireVerified }, async (request, reply) => {
-    if (request.userRole !== 'CUSTOMER') return reply.status(403).send({ error: 'CUSTOMERS_ONLY' })
+    if (request.userRole === 'ADMIN') return reply.status(403).send({ error: 'ADMINS_CANNOT_RELEASE_PAYMENT' })
 
     const { id } = request.params as { id: string }
     try {

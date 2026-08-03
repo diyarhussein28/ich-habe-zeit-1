@@ -118,6 +118,7 @@ export interface Order {
   totalAmount?: number
   grossAmount?: number
   platformFee?: number
+  commissionAmount?: number
   providerAmount?: number
   netProviderAmount?: number
   releaseDeadline?: string

@@ -70,7 +70,7 @@ export async function requestRoutes(app: FastifyInstance) {
       categoryId: query.categoryId,
       status: query.status as never,
       plz: query.plz,
-      customerId: request.userRole === 'CUSTOMER' ? request.userId : undefined,
+      customerId: request.userId,
       limit: query.limit,
       offset: query.offset,
     })
@@ -79,8 +79,8 @@ export async function requestRoutes(app: FastifyInstance) {
 
   // POST /requests — create request
   app.post('/', { preHandler: requireVerified }, async (request, reply) => {
-    if (request.userRole !== 'CUSTOMER') {
-      return reply.status(403).send({ error: 'CUSTOMERS_ONLY' })
+    if (request.userRole === 'ADMIN') {
+      return reply.status(403).send({ error: 'ADMINS_CANNOT_POST_REQUESTS' })
     }
 
     const body = createRequestSchema.safeParse(request.body)

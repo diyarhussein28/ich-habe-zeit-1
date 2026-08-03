@@ -3,9 +3,6 @@ import { colors } from '../../../src/constants/theme'
 
 export default function OrdersStack() {
   return (
-    <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.background } }}>
-      <Stack.Screen name="index" />
-      <Stack.Screen name="[id]" />
-    </Stack>
+    <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.background } }} />
   )
 }

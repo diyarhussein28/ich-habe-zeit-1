@@ -284,6 +284,52 @@ export async function adminRoutes(app: FastifyInstance) {
     }
   )
 
+  // PATCH /admin/users/:id/role
+  app.patch(
+    '/users/:id/role',
+    { preHandler: requireRole('ADMIN') },
+    async (request, reply) => {
+      const { id } = request.params as { id: string }
+      const body = z.object({ role: z.enum(['CUSTOMER', 'PROVIDER'] as const) }).safeParse(request.body)
+      if (!body.success) {
+        return reply.status(400).send({ error: 'VALIDATION_ERROR', details: body.error.flatten() })
+      }
+
+      const user = await prisma.user.findUnique({ where: { id } })
+      if (!user) return reply.status(404).send({ error: 'USER_NOT_FOUND' })
+      if (user.role === body.data.role) return reply.send({ user })
+
+      const updated = await prisma.$transaction(async (tx) => {
+        const u = await tx.user.update({ where: { id }, data: { role: body.data.role } })
+        if (body.data.role === 'PROVIDER') {
+          await tx.providerProfile.upsert({
+            where: { userId: id },
+            create: { userId: id, languages: ['Deutsch'] },
+            update: {},
+          })
+        } else {
+          await tx.customerProfile.upsert({
+            where: { userId: id },
+            create: { userId: id },
+            update: {},
+          })
+        }
+        return u
+      })
+
+      await writeAuditLog(
+        request.userId,
+        'USER_ROLE_CHANGED',
+        'User',
+        id,
+        { previousRole: user.role, newRole: body.data.role },
+        id
+      )
+
+      return reply.send({ user: updated })
+    }
+  )
+
   // PATCH /admin/users/:id/suspend
   app.patch(
     '/users/:id/suspend',

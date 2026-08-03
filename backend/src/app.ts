@@ -32,6 +32,7 @@ export async function buildApp() {
   await app.register(cors, {
     origin: env.NODE_ENV === 'production' ? false : true,
     credentials: true,
+    methods: ['GET', 'HEAD', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   })
 
   // JWT

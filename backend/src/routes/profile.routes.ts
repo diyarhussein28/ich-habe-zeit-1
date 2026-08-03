@@ -3,6 +3,7 @@ import { z } from 'zod'
 import * as profileService from '../services/profile.service.js'
 import * as providerService from '../services/provider.service.js'
 import { requireAuth, requireRole } from '../middleware/auth.middleware.js'
+import { prisma } from '../config/prisma.js'
 
 // ─── Schemas ──────────────────────────────────────────────────────────────────
 
@@ -234,6 +235,17 @@ export async function profileRoutes(app: FastifyInstance) {
       }
     }
   )
+
+  // GET /profile/provider/categories
+  app.get('/provider/categories', { preHandler: requireRole('PROVIDER') }, async (request, reply) => {
+    const profile = await prisma.providerProfile.findUnique({ where: { userId: request.userId } })
+    if (!profile) return reply.send({ categories: [] })
+    const rows = await prisma.providerCategory.findMany({
+      where: { providerProfileId: profile.id },
+      include: { category: { select: { id: true, name: true, icon: true } } },
+    })
+    return reply.send({ categories: rows.map((r) => ({ ...r.category, isVerified: r.isVerified })) })
+  })
 
   // PUT /profile/provider/categories
   app.put(
