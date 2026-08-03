@@ -16,6 +16,7 @@ import { invoiceRoutes } from './routes/invoice.routes.js'
 import { kycRoutes } from './routes/kyc.routes.js'
 import { notificationsRoutes } from './routes/notifications.routes.js'
 import { stripeRoutes } from './routes/stripe.routes.js'
+import { listingRoutes } from './routes/listing.routes.js'
 import { chatGateway } from './ws/chat.gateway.js'
 
 export async function buildApp() {
@@ -65,6 +66,7 @@ export async function buildApp() {
   await app.register(kycRoutes, { prefix: '/api/kyc' })
   await app.register(notificationsRoutes, { prefix: '/api/notifications' })
   await app.register(stripeRoutes, { prefix: '/api/stripe' })
+  await app.register(listingRoutes, { prefix: '/api/listings' })
 
   // Health check
   app.get('/health', async () => ({ status: 'ok', timestamp: new Date().toISOString() }))

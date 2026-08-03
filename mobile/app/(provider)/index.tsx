@@ -72,8 +72,11 @@ export default function ProviderFeedScreen() {
           <Text style={styles.sub}>Neue Aufträge in deiner Region</Text>
         </View>
         <View style={styles.headerActions}>
+          <TouchableOpacity onPress={() => router.push('/(provider)/listings')} style={styles.myRequestsBtn}>
+            <Text style={styles.myRequestsBtnText}>Inserate</Text>
+          </TouchableOpacity>
           <TouchableOpacity onPress={() => router.push('/(provider)/requests')} style={styles.myRequestsBtn}>
-            <Text style={styles.myRequestsBtnText}>Meine Anfragen</Text>
+            <Text style={styles.myRequestsBtnText}>Anfragen</Text>
           </TouchableOpacity>
           <TouchableOpacity onPress={() => router.push('/(customer)/requests/create')} style={styles.postBtn}>
             <Text style={styles.postBtnText}>+ Auftrag</Text>

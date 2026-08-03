@@ -1,11 +1,10 @@
-import React from 'react'
+import React, { useState } from 'react'
 import {
   View,
   Text,
   FlatList,
   TouchableOpacity,
   StyleSheet,
-  Alert,
   RefreshControl,
 } from 'react-native'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
@@ -42,6 +41,8 @@ const STATUS_COLOR: Record<string, 'primary' | 'success' | 'warning' | 'error' |
 export default function ProviderOrdersScreen() {
   const router = useRouter()
   const qc = useQueryClient()
+  const [confirmId, setConfirmId] = useState<string | null>(null)
+  const [completeError, setCompleteError] = useState<string | null>(null)
 
   const { data, isLoading, refetch } = useQuery({
     queryKey: ['provider-orders'],
@@ -50,17 +51,42 @@ export default function ProviderOrdersScreen() {
 
   const completeMutation = useMutation({
     mutationFn: (orderId: string) => ordersApi.markComplete(orderId),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['provider-orders'] }),
-    onError: (err) => Alert.alert('Fehler', getApiErrorMessage(err)),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['provider-orders'] })
+      setConfirmId(null)
+      setCompleteError(null)
+    },
+    onError: (err) => setCompleteError(getApiErrorMessage(err)),
   })
 
-  const orders = data?.data ?? []
+  const orders = (data as unknown as { orders?: Order[] })?.orders ?? []
 
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
       <View style={styles.header}>
         <Text style={styles.title}>Meine Aufträge</Text>
       </View>
+
+      {confirmId ? (
+        <View style={styles.confirmBanner}>
+          <Text style={styles.confirmText}>Arbeit wirklich als abgeschlossen markieren?</Text>
+          {completeError ? <Text style={styles.errorText}>{completeError}</Text> : null}
+          <View style={styles.confirmActions}>
+            <TouchableOpacity onPress={() => { setConfirmId(null); setCompleteError(null) }} style={styles.cancelBtn}>
+              <Text style={styles.cancelBtnText}>Abbrechen</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={() => completeMutation.mutate(confirmId)}
+              style={styles.confirmBtn}
+              disabled={completeMutation.isPending}
+            >
+              <Text style={styles.confirmBtnText}>
+                {completeMutation.isPending ? 'Wird gesendet...' : 'Bestätigen'}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      ) : null}
 
       <FlatList
         data={orders}
@@ -82,15 +108,7 @@ export default function ProviderOrdersScreen() {
             order={item}
             onDetail={() => router.push(`/orders/${item.id}`)}
             onChat={() => router.push(`/chat/${item.id}`)}
-            onComplete={
-              item.status === 'IN_PROGRESS'
-                ? () =>
-                    Alert.alert('Auftrag abschließen', 'Bestätigst du, dass die Arbeit abgeschlossen ist?', [
-                      { text: 'Abbrechen', style: 'cancel' },
-                      { text: 'Bestätigen', onPress: () => completeMutation.mutate(item.id) },
-                    ])
-                : undefined
-            }
+            onComplete={item.status === 'IN_PROGRESS' ? () => setConfirmId(item.id) : undefined}
           />
         )}
       />
@@ -120,7 +138,9 @@ function OrderCard({
         </View>
         <View style={styles.amounts}>
           <Text style={styles.amountLabel}>Auszahlung</Text>
-          <Text style={styles.amountValue}>{order.providerAmount.toFixed(2)} €</Text>
+          <Text style={styles.amountValue}>
+            {(order.netProviderAmount ?? order.providerAmount ?? 0).toFixed(2)} €
+          </Text>
         </View>
         <View style={styles.cardActions}>
           <TouchableOpacity onPress={(e) => { e.stopPropagation?.(); onChat() }} style={styles.chatBtn}>
@@ -154,4 +174,21 @@ const styles = StyleSheet.create({
   emptyEmoji: { fontSize: 56, marginBottom: spacing.md },
   emptyTitle: { fontSize: fontSize.lg, fontWeight: fontWeight.bold, color: colors.text, marginBottom: spacing.sm },
   emptyText: { fontSize: fontSize.md, color: colors.textSecondary, textAlign: 'center' },
+  confirmBanner: {
+    margin: spacing.lg, padding: spacing.md, borderRadius: 10,
+    backgroundColor: '#fffbeb', borderWidth: 1, borderColor: '#f59e0b',
+  },
+  confirmText: { fontSize: fontSize.md, fontWeight: fontWeight.semibold, color: colors.text, marginBottom: spacing.sm },
+  errorText: { fontSize: fontSize.sm, color: colors.error, marginBottom: spacing.sm },
+  confirmActions: { flexDirection: 'row', gap: spacing.sm },
+  cancelBtn: {
+    flex: 1, paddingVertical: spacing.sm, borderRadius: 8,
+    borderWidth: 1, borderColor: colors.border, alignItems: 'center',
+  },
+  cancelBtnText: { fontSize: fontSize.sm, color: colors.textSecondary },
+  confirmBtn: {
+    flex: 1, paddingVertical: spacing.sm, borderRadius: 8,
+    backgroundColor: colors.primary, alignItems: 'center',
+  },
+  confirmBtnText: { fontSize: fontSize.sm, fontWeight: fontWeight.semibold, color: colors.textInverse },
 })

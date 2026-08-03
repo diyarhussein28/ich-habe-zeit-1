@@ -101,6 +101,19 @@ export default function CustomerHomeScreen() {
           </View>
         )}
 
+        {/* Inserate banner */}
+        <TouchableOpacity
+          style={styles.inserteBanner}
+          activeOpacity={0.85}
+          onPress={() => router.push('/(customer)/listings')}
+        >
+          <View>
+            <Text style={styles.inserteBannerTitle}>Inserate durchsuchen</Text>
+            <Text style={styles.inserteBannerSub}>Dienstleister mit Festpreisen in deiner Nähe</Text>
+          </View>
+          <Text style={styles.inserteBannerArrow}>→</Text>
+        </TouchableOpacity>
+
         {/* Categories */}
         <Text style={styles.sectionTitle}>Kategorien</Text>
         {catsLoading ? (
@@ -254,6 +267,14 @@ const styles = StyleSheet.create({
   },
   catCardSelected: { borderColor: colors.primary, backgroundColor: colors.primaryLight },
   catIcon: { fontSize: 36, marginBottom: spacing.sm },
+  inserteBanner: {
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+    backgroundColor: colors.primary, borderRadius: radius.lg,
+    padding: spacing.md, marginBottom: spacing.lg,
+  },
+  inserteBannerTitle: { fontSize: fontSize.md, fontWeight: fontWeight.bold, color: colors.textInverse },
+  inserteBannerSub: { fontSize: fontSize.xs, color: colors.textInverse, opacity: 0.85, marginTop: 2 },
+  inserteBannerArrow: { fontSize: 22, color: colors.textInverse },
   catName: {
     fontSize: fontSize.sm,
     fontWeight: fontWeight.medium,

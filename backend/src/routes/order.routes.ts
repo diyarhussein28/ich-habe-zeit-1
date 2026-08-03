@@ -174,7 +174,7 @@ export async function orderRoutes(app: FastifyInstance) {
     if (request.userRole !== 'PROVIDER') return reply.status(403).send({ error: 'PROVIDERS_ONLY' })
 
     const { id } = request.params as { id: string }
-    const body = markCompleteSchema.safeParse(request.body)
+    const body = markCompleteSchema.safeParse(request.body ?? {})
     if (!body.success) return reply.status(400).send({ error: 'VALIDATION_ERROR' })
 
     try {

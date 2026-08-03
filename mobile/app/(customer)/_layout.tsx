@@ -60,6 +60,8 @@ export default function CustomerLayout() {
       />
       {/* Hidden routes — navigable but not shown in tab bar */}
       <Tabs.Screen name="browse/[categoryId]" options={{ href: null }} />
+      <Tabs.Screen name="listings/index" options={{ href: null }} />
+      <Tabs.Screen name="listings/[id]" options={{ href: null }} />
     </Tabs>
   )
 }
