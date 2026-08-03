@@ -14,7 +14,10 @@
     },
     "ios": {
       "supportsTablet": false,
-      "bundleIdentifier": "de.ichhabezeit.app"
+      "bundleIdentifier": "de.ichhabezeit.app",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -34,16 +37,8 @@
       "expo-router",
       "expo-secure-store",
       [
-        "expo-notifications",
-        {
-          "icon": "./assets/icon.png",
-          "color": "#1A56DB"
-        }
-      ],
-      [
         "@stripe/stripe-react-native",
         {
-          "merchantIdentifier": "merchant.de.ichhabezeit",
           "enableGooglePay": false
         }
       ]
@@ -54,9 +49,9 @@
     "extra": {
       "router": {},
       "eas": {
-        "projectId": "f681d549-a957-4844-9411-d25c7155d1e3"
+        "projectId": "32bf1253-53f6-48b0-93ea-eb28ebe6cb8b"
       }
     },
-    "owner": "and2row"
+    "owner": "diyar29"
   }
 }

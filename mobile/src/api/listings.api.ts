@@ -1,4 +1,4 @@
-import { api } from './client'
+import { apiClient } from './client'
 
 export interface ServiceListing {
   id: string
@@ -48,19 +48,19 @@ export interface CreateListingInput {
 
 export const listingsApi = {
   browse: (params?: ListingsQuery) =>
-    api.get<{ items: ServiceListing[]; total: number }>('/api/listings', { params }),
+    apiClient.get<{ items: ServiceListing[]; total: number }>('/api/listings', { params }),
 
   getById: (id: string) =>
-    api.get<{ listing: ServiceListing }>(`/api/listings/${id}`),
+    apiClient.get<{ listing: ServiceListing }>(`/api/listings/${id}`),
 
   create: (data: CreateListingInput) =>
-    api.post<{ listing: ServiceListing }>('/api/listings', data),
+    apiClient.post<{ listing: ServiceListing }>('/api/listings', data),
 
   update: (id: string, data: Partial<CreateListingInput> & { status?: 'ACTIVE' | 'PAUSED' | 'ARCHIVED' }) =>
-    api.patch<{ listing: ServiceListing }>(`/api/listings/${id}`, data),
+    apiClient.patch<{ listing: ServiceListing }>(`/api/listings/${id}`, data),
 
   book: (id: string, preferredDate?: string) =>
-    api.post<{ order: { id: string; status: string; grossAmount: number } }>(
+    apiClient.post<{ order: { id: string; status: string; grossAmount: number } }>(
       `/api/listings/${id}/book`,
       preferredDate ? { preferredDate } : {},
     ),
