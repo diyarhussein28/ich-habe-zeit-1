@@ -199,6 +199,20 @@ export async function listProviderFeed(providerUserId: string, limit = 20, offse
   return { total, items: itemsWithFlag }
 }
 
+// ─── Auto-expire ──────────────────────────────────────────────────────────────
+
+export async function expireOldRequests() {
+  const result = await prisma.serviceRequest.updateMany({
+    where: {
+      status: 'OPEN',
+      expiresAt: { lt: new Date() },
+    },
+    data: { status: 'EXPIRED' },
+  })
+
+  return { expired: result.count }
+}
+
 export async function cancelRequest(requestId: string, userId: string) {
   const request = await prisma.serviceRequest.findFirst({
     where: { id: requestId, customer: { userId } },

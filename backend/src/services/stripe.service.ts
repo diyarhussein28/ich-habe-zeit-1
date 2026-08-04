@@ -141,6 +141,90 @@ export async function releaseOrderPayment(orderId: string) {
   return { transferId }
 }
 
+// ─── Full refund: cancel (if not yet captured) or refund (if captured) ────────
+
+export async function refundOrderPayment(orderId: string) {
+  const order = await prisma.order.findUnique({ where: { id: orderId } })
+  if (!order) throw new Error('ORDER_NOT_FOUND')
+
+  if (!order.mangopayPayInId || order.mangopayEscrowWalletId === 'simulated') {
+    return { refundId: undefined }
+  }
+
+  const pi = await stripe.paymentIntents.retrieve(order.mangopayPayInId)
+
+  if (pi.status === 'requires_capture') {
+    await stripe.paymentIntents.cancel(order.mangopayPayInId)
+    return { refundId: undefined }
+  }
+  if (pi.status !== 'succeeded') {
+    throw new Error(`CANNOT_REFUND: status=${pi.status}`)
+  }
+
+  const refund = await stripe.refunds.create({
+    payment_intent: order.mangopayPayInId,
+    metadata: { orderId },
+  })
+  return { refundId: refund.id }
+}
+
+// ─── Partial release: capture + transfer part to provider, refund the rest ────
+
+export async function partialReleaseOrderPayment(orderId: string, releasedAmount: number) {
+  const order = await prisma.order.findUnique({
+    where: { id: orderId },
+    include: { offer: { include: { provider: true } } },
+  })
+  if (!order) throw new Error('ORDER_NOT_FOUND')
+
+  if (!order.mangopayPayInId || order.mangopayEscrowWalletId === 'simulated') {
+    return { transferId: undefined, refundId: undefined }
+  }
+
+  const pi = await stripe.paymentIntents.retrieve(order.mangopayPayInId)
+  if (!['requires_capture', 'succeeded'].includes(pi.status)) {
+    throw new Error(`CANNOT_RELEASE: status=${pi.status}`)
+  }
+
+  let capturedPi = pi
+  if (pi.status === 'requires_capture') {
+    capturedPi = await stripe.paymentIntents.capture(order.mangopayPayInId)
+  }
+
+  const providerStripeId = order.offer.provider.stripeConnectAccountId
+  let transferId: string | undefined
+
+  if (providerStripeId && order.offer.provider.stripeConnectEnabled && releasedAmount > 0) {
+    const chargeId =
+      typeof capturedPi.latest_charge === 'string'
+        ? capturedPi.latest_charge
+        : capturedPi.latest_charge?.id
+
+    const transfer = await stripe.transfers.create({
+      amount: Math.round(releasedAmount * 100),
+      currency: 'eur',
+      destination: providerStripeId,
+      ...(chargeId ? { source_transaction: chargeId } : {}),
+      metadata: { orderId, type: 'partial_release' },
+    })
+    transferId = transfer.id
+  }
+
+  const refundAmount = Math.max(0, order.grossAmount - releasedAmount)
+  let refundId: string | undefined
+
+  if (refundAmount > 0) {
+    const refund = await stripe.refunds.create({
+      payment_intent: order.mangopayPayInId,
+      amount: Math.round(refundAmount * 100),
+      metadata: { orderId, type: 'partial_release' },
+    })
+    refundId = refund.id
+  }
+
+  return { transferId, refundId }
+}
+
 // ─── Stripe Connect onboarding ────────────────────────────────────────────────
 
 export async function createConnectOnboardingLink(userId: string, returnUrl: string, refreshUrl: string) {

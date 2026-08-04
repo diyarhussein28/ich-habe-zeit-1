@@ -2,6 +2,13 @@ import bcrypt from 'bcryptjs'
 import { prisma } from '../config/prisma.js'
 import { createOtp, verifyOtp, incrementOtpAttempts } from './otp.service.js'
 import { sendOtpEmail, sendOtpSms } from './notification.service.js'
+import {
+  generateTotpSecret,
+  generateTotpUri,
+  verifyTotpToken,
+  generateRecoveryCodes,
+  hashRecoveryCode,
+} from '../lib/totp.js'
 import type { UserRole } from '@prisma/client'
 
 export async function registerUser(data: {
@@ -104,6 +111,10 @@ export async function loginUser(email: string, password: string) {
   return user
 }
 
+export async function getUserById(userId: string) {
+  return prisma.user.findUnique({ where: { id: userId } })
+}
+
 export async function resendOtp(userId: string, type: 'email' | 'phone') {
   const user = await prisma.user.findUnique({ where: { id: userId } })
   if (!user) throw new Error('USER_NOT_FOUND')
@@ -166,4 +177,72 @@ export async function revokeAllSessions(userId: string) {
     where: { userId, revokedAt: null },
     data: { revokedAt: new Date() },
   })
+}
+
+// ─── MFA (TOTP) ─────────────────────────────────────────────────────────────
+
+export async function startMfaSetup(userId: string) {
+  const user = await prisma.user.findUnique({ where: { id: userId } })
+  if (!user) throw new Error('USER_NOT_FOUND')
+
+  const secret = generateTotpSecret()
+  await prisma.user.update({ where: { id: userId }, data: { mfaSecret: secret } })
+
+  return {
+    secret,
+    otpauthUri: generateTotpUri(secret, user.email),
+  }
+}
+
+export async function confirmMfaSetup(userId: string, token: string) {
+  const user = await prisma.user.findUnique({ where: { id: userId } })
+  if (!user) throw new Error('USER_NOT_FOUND')
+  if (!user.mfaSecret) throw new Error('MFA_SETUP_NOT_STARTED')
+
+  if (!verifyTotpToken(user.mfaSecret, token)) throw new Error('INVALID_CODE')
+
+  const recoveryCodes = generateRecoveryCodes()
+  await prisma.user.update({
+    where: { id: userId },
+    data: {
+      mfaEnabled: true,
+      mfaRecoveryCodes: recoveryCodes.map(hashRecoveryCode),
+    },
+  })
+
+  return { recoveryCodes }
+}
+
+export async function disableMfa(userId: string, password: string) {
+  const user = await prisma.user.findUnique({ where: { id: userId } })
+  if (!user) throw new Error('USER_NOT_FOUND')
+
+  const valid = await bcrypt.compare(password, user.passwordHash)
+  if (!valid) throw new Error('INVALID_CREDENTIALS')
+
+  await prisma.user.update({
+    where: { id: userId },
+    data: { mfaEnabled: false, mfaSecret: null, mfaRecoveryCodes: [] },
+  })
+}
+
+// Verifies a TOTP code or, failing that, a one-time recovery code (which is
+// consumed on use). Returns true and — if a recovery code was used — updates
+// the user's remaining code list as a side effect.
+export async function verifyMfaLogin(userId: string, code: string) {
+  const user = await prisma.user.findUnique({ where: { id: userId } })
+  if (!user || !user.mfaEnabled || !user.mfaSecret) throw new Error('MFA_NOT_ENABLED')
+
+  if (verifyTotpToken(user.mfaSecret, code)) return true
+
+  const codeHash = hashRecoveryCode(code)
+  if (user.mfaRecoveryCodes.includes(codeHash)) {
+    await prisma.user.update({
+      where: { id: userId },
+      data: { mfaRecoveryCodes: user.mfaRecoveryCodes.filter((c) => c !== codeHash) },
+    })
+    return true
+  }
+
+  return false
 }

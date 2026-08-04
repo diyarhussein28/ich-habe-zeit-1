@@ -76,6 +76,10 @@ async function seed() {
     { type: 'impressum', title: 'Impressum', version: '1.0' },
     { type: 'privacy_policy', title: 'Datenschutzerklärung', version: '1.0' },
     { type: 'cancellation', title: 'Widerrufsbelehrung', version: '1.0' },
+    { type: 'dispute_policy', title: 'Streitschlichtungsrichtlinie', version: '1.0' },
+    { type: 'review_policy', title: 'Bewertungsrichtlinie', version: '1.0' },
+    { type: 'cookie_policy', title: 'Cookie-Richtlinie', version: '1.0' },
+    { type: 'provider_terms', title: 'Anbieter-AGB', version: '1.0' },
   ]
 
   for (const doc of legalDocs) {

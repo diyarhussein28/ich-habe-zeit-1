@@ -1,7 +1,7 @@
 import { NavLink } from 'react-router-dom'
 import {
   LayoutDashboard, Users, Package, AlertTriangle,
-  Tag, Percent, FileText, LogOut,
+  Tag, Percent, FileText, LogOut, ShieldCheck, LifeBuoy,
 } from 'lucide-react'
 import { cn, initials } from '@/lib/utils'
 import { useAuthStore } from '@/store/auth.store'
@@ -12,9 +12,11 @@ const nav = [
   { to: '/users',            icon: Users,            label: 'Benutzer' },
   { to: '/orders',           icon: Package,          label: 'Bestellungen' },
   { to: '/disputes',         icon: AlertTriangle,    label: 'Streitfälle' },
+  { to: '/support',          icon: LifeBuoy,         label: 'Support' },
   { to: '/categories',       icon: Tag,              label: 'Kategorien' },
   { to: '/commission-rates', icon: Percent,          label: 'Provisionen' },
   { to: '/legal-docs',       icon: FileText,         label: 'Rechtliches' },
+  { to: '/security',         icon: ShieldCheck,      label: 'Sicherheit' },
 ]
 
 export function Sidebar() {

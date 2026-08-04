@@ -38,14 +38,27 @@ export async function requireAuth(request: FastifyRequest, reply: FastifyReply) 
 export function requireRole(...roles: string[]) {
   return async (request: FastifyRequest, reply: FastifyReply) => {
     await requireAuth(request, reply)
+    if (reply.sent) return
+
     if (!roles.includes(request.userRole)) {
       return reply.status(403).send({ error: 'FORBIDDEN' })
+    }
+
+    if (request.userRole === 'ADMIN' || request.userRole === 'HELP_DESK') {
+      const user = await prisma.user.findUnique({
+        where: { id: request.userId },
+        select: { mfaEnabled: true },
+      })
+      if (!user?.mfaEnabled) {
+        return reply.status(403).send({ error: 'MFA_SETUP_REQUIRED' })
+      }
     }
   }
 }
 
 export async function requireVerified(request: FastifyRequest, reply: FastifyReply) {
   await requireAuth(request, reply)
+  if (reply.sent) return
 
   const user = await prisma.user.findUnique({
     where: { id: request.userId },

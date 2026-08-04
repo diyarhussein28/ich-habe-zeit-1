@@ -1,5 +1,6 @@
 import { prisma } from '../config/prisma.js'
 import { getEffectiveCommissionRate } from './category.service.js'
+import { releaseOrderPayment } from './stripe.service.js'
 import { env } from '../config/env.js'
 import type { OrderStatus } from '@prisma/client'
 
@@ -87,60 +88,6 @@ export async function acceptOffer(offerId: string, customerUserId: string) {
   return order
 }
 
-// ─── Payment capture (stub — Mangopay integration point) ─────────────────────
-
-export async function capturePayment(orderId: string, customerUserId: string) {
-  const order = await prisma.order.findFirst({
-    where: { id: orderId, customerId: customerUserId, status: 'AWAITING_PAYMENT' },
-  })
-  if (!order) throw new Error('ORDER_NOT_FOUND')
-
-  // TODO: Call Mangopay PayIn API here
-  // For now, stub the payment as captured
-  const mangopayPayInId = `stub_payin_${Date.now()}`
-  const mangopayEscrowWalletId = `stub_escrow_${orderId}`
-
-  const releaseDeadline = new Date()
-  releaseDeadline.setHours(releaseDeadline.getHours() + order.releaseWindowHours)
-
-  return prisma.$transaction(async (tx) => {
-    const updated = await tx.order.update({
-      where: { id: orderId },
-      data: {
-        status: 'IN_PROGRESS',
-        paymentStatus: 'CAPTURED',
-        mangopayPayInId,
-        mangopayEscrowWalletId,
-        releaseDeadline,
-      },
-    })
-
-    await tx.serviceRequest.update({
-      where: { id: order.requestId },
-      data: { status: 'IN_PROGRESS' },
-    })
-
-    await tx.orderStatusHistory.create({
-      data: { orderId, status: 'IN_PROGRESS', triggeredBy: 'system' },
-    })
-
-    // Inject system message in chat
-    const chat = await tx.chat.findUnique({ where: { orderId } })
-    if (chat) {
-      await tx.chatMessage.create({
-        data: {
-          chatId: chat.id,
-          senderId: 'system',
-          content: 'Zahlung erfolgreich eingegangen. Der Auftrag ist jetzt aktiv.',
-          isSystem: true,
-        },
-      })
-    }
-
-    return updated
-  })
-}
-
 // ─── Provider marks job complete ─────────────────────────────────────────────
 
 export async function markComplete(
@@ -196,7 +143,7 @@ export async function markComplete(
 
 // ─── Customer releases payment ────────────────────────────────────────────────
 
-export async function releasePayment(orderId: string, customerUserId: string) {
+export async function releasePayment(orderId: string, customerUserId: string, transferId?: string) {
   const order = await prisma.order.findFirst({
     where: {
       id: orderId,
@@ -207,9 +154,6 @@ export async function releasePayment(orderId: string, customerUserId: string) {
   if (!order) throw new Error('ORDER_NOT_FOUND')
 
   return prisma.$transaction(async (tx) => {
-    // TODO: Call Mangopay split transfer here
-    const mangopayTransferId = `stub_transfer_${Date.now()}`
-
     const updated = await tx.order.update({
       where: { id: orderId },
       data: {
@@ -217,7 +161,7 @@ export async function releasePayment(orderId: string, customerUserId: string) {
         releasedAt: new Date(),
         autoReleased: false,
         paymentStatus: 'RELEASED',
-        mangopayTransferId,
+        ...(transferId ? { mangopayTransferId: transferId } : {}),
         releasedAmount: order.netProviderAmount,
       },
     })
@@ -260,7 +204,10 @@ export async function processAutoReleases() {
 
   const results = await Promise.allSettled(
     expiredOrders.map(async (order) => {
-      // TODO: Call Mangopay split transfer here
+      // Call Stripe first — if the transfer fails, the order must not be
+      // marked RELEASED, so it stays in the queue for the next run.
+      const { transferId } = await releaseOrderPayment(order.id)
+
       await prisma.$transaction(async (tx) => {
         await tx.order.update({
           where: { id: order.id },
@@ -270,6 +217,7 @@ export async function processAutoReleases() {
             autoReleased: true,
             paymentStatus: 'RELEASED',
             releasedAmount: order.netProviderAmount,
+            ...(transferId ? { mangopayTransferId: transferId } : {}),
           },
         })
 

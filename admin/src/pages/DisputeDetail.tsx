@@ -14,8 +14,8 @@ const OUTCOMES: { value: DisputeOutcome; label: string; desc: string; color: str
   { value: 'FULL_RELEASE',                label: 'Volle Auszahlung',            desc: 'Gesamtbetrag an Dienstleister', color: 'btn-primary' },
   { value: 'FULL_REFUND',                 label: 'Volle Erstattung',            desc: 'Gesamtbetrag zurück an Kunden', color: 'btn-danger' },
   { value: 'PARTIAL_RELEASE',             label: 'Teillösung',                  desc: 'Aufteilung des Betrags',        color: 'btn-secondary' },
-  { value: 'CLOSE_IN_FAVOR_OF_CUSTOMER',  label: 'Zugunsten Auftraggeber',      desc: 'Fall wird geschlossen',         color: 'btn-secondary' },
-  { value: 'CLOSE_IN_FAVOR_OF_PROVIDER',  label: 'Zugunsten Dienstleister',     desc: 'Fall wird geschlossen',         color: 'btn-secondary' },
+  { value: 'REWORK_AGREEMENT',            label: 'Nacharbeit vereinbart',       desc: 'Betrag bleibt eingefroren, neue Frist', color: 'btn-secondary' },
+  { value: 'ESCALATED',                   label: 'Eskaliert',                   desc: 'An externe Schlichtungsstelle verwiesen', color: 'btn-secondary' },
 ]
 
 export default function DisputeDetail() {

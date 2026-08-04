@@ -8,7 +8,6 @@ import {
   TextInput,
   ActivityIndicator,
   Switch,
-  Linking,
 } from 'react-native'
 import { useRouter } from 'expo-router'
 import { SafeAreaView } from 'react-native-safe-area-context'
@@ -21,6 +20,8 @@ import { Badge } from '../../../src/components/ui/Badge'
 import { Button } from '../../../src/components/ui/Button'
 import { getApiErrorMessage } from '../../../src/api/client'
 import { colors, spacing, fontSize, fontWeight, radius } from '../../../src/constants/theme'
+import { LegalDocsAccordion } from '../../../src/components/LegalDocsAccordion'
+import { AccountDataActions } from '../../../src/components/AccountDataActions'
 
 const KYC_LABEL: Record<string, string> = {
   REGISTERED: 'Nicht verifiziert',
@@ -45,6 +46,7 @@ export default function CustomerProfileScreen() {
   const [pushEnabled, setPushEnabled] = useState(true)
   const [emailEnabled, setEmailEnabled] = useState(true)
   const [showAgb, setShowAgb] = useState(false)
+  const [showAccountData, setShowAccountData] = useState(false)
 
   const { data, isLoading } = useQuery({
     queryKey: ['my-profile'],
@@ -187,14 +189,13 @@ export default function CustomerProfileScreen() {
             </View>
           )}
           <Divider />
-          <MenuItem emoji="📄" label="AGB & Datenschutz" onPress={() => setShowAgb((v) => !v)} />
-          {showAgb && (
-            <View style={styles.notifPanel}>
-              <Text style={styles.notifLabel}>AGB & Datenschutz werden in Kürze verfügbar sein.</Text>
-            </View>
-          )}
+          <MenuItem emoji="📄" label="Rechtliches" onPress={() => setShowAgb((v) => !v)} />
+          {showAgb && <LegalDocsAccordion />}
           <Divider />
-          <MenuItem emoji="❓" label="Hilfe & Support" onPress={() => Linking.openURL('mailto:support@ich-habe-zeit.de')} />
+          <MenuItem emoji="🔒" label="Konto & Daten" onPress={() => setShowAccountData((v) => !v)} />
+          {showAccountData && <AccountDataActions />}
+          <Divider />
+          <MenuItem emoji="❓" label="Hilfe & Support" onPress={() => router.push('/support')} />
         </Card>
 
         <Button

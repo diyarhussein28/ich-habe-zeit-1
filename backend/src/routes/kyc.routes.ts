@@ -90,7 +90,7 @@ export async function kycRoutes(app: FastifyInstance) {
   app.get('/documents/:id/file', { preHandler: requireAuth }, async (request, reply) => {
     const { id } = request.params as { id: string }
     try {
-      const { absPath, mimeType, fileName } = await getKycDocumentFile(id, request.userId)
+      const { absPath, mimeType, fileName } = await getKycDocumentFile(id, request.userId, request.userRole)
       const stream = fs.createReadStream(absPath)
       return reply
         .header('Content-Type', mimeType)

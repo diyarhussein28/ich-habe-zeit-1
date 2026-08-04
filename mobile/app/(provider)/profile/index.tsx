@@ -12,6 +12,8 @@ import { Card } from '../../../src/components/ui/Card'
 import { Badge } from '../../../src/components/ui/Badge'
 import { Button } from '../../../src/components/ui/Button'
 import { colors, spacing, fontSize, fontWeight, radius } from '../../../src/constants/theme'
+import { LegalDocsAccordion } from '../../../src/components/LegalDocsAccordion'
+import { AccountDataActions } from '../../../src/components/AccountDataActions'
 
 const KYC_LABEL: Record<string, string> = {
   REGISTERED: 'Nicht verifiziert',
@@ -36,6 +38,7 @@ export default function ProviderProfileScreen() {
   const [pushEnabled, setPushEnabled] = useState(true)
   const [emailEnabled, setEmailEnabled] = useState(true)
   const [showAgb, setShowAgb] = useState(false)
+  const [showAccountData, setShowAccountData] = useState(false)
   const [showCategoryEditor, setShowCategoryEditor] = useState(false)
   const [selectedCategoryIds, setSelectedCategoryIds] = useState<string[]>([])
   const [catSaveError, setCatSaveError] = useState<string | null>(null)
@@ -278,14 +281,13 @@ export default function ProviderProfileScreen() {
             </View>
           )}
           <Divider />
-          <MenuItem emoji="📄" label="AGB & Datenschutz" onPress={() => setShowAgb((v) => !v)} />
-          {showAgb && (
-            <View style={styles.notifPanel}>
-              <Text style={styles.notifLabel}>AGB & Datenschutz werden in Kürze verfügbar sein.</Text>
-            </View>
-          )}
+          <MenuItem emoji="📄" label="Rechtliches" onPress={() => setShowAgb((v) => !v)} />
+          {showAgb && <LegalDocsAccordion />}
           <Divider />
-          <MenuItem emoji="❓" label="Hilfe & Support" onPress={() => Linking.openURL('mailto:support@ich-habe-zeit.de')} />
+          <MenuItem emoji="🔒" label="Konto & Daten" onPress={() => setShowAccountData((v) => !v)} />
+          {showAccountData && <AccountDataActions />}
+          <Divider />
+          <MenuItem emoji="❓" label="Hilfe & Support" onPress={() => router.push('/support')} />
         </Card>
 
         <Button label="Abmelden" variant="danger" onPress={handleLogout} style={styles.logoutBtn} />

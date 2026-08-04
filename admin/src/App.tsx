@@ -13,6 +13,9 @@ import DisputeDetail from '@/pages/DisputeDetail'
 import Categories from '@/pages/Categories'
 import CommissionRates from '@/pages/CommissionRates'
 import LegalDocs from '@/pages/LegalDocs'
+import Security from '@/pages/Security'
+import Support from '@/pages/Support'
+import SupportDetail from '@/pages/SupportDetail'
 
 export default function App() {
   const { logout } = useAuthStore()
@@ -34,6 +37,9 @@ export default function App() {
         <Route path="/categories" element={<Categories />} />
         <Route path="/commission-rates" element={<CommissionRates />} />
         <Route path="/legal-docs" element={<LegalDocs />} />
+        <Route path="/security" element={<Security />} />
+        <Route path="/support" element={<Support />} />
+        <Route path="/support/:id" element={<SupportDetail />} />
       </Route>
       <Route path="*" element={<Navigate to="/dashboard" replace />} />
     </Routes>

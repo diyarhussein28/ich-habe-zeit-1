@@ -111,7 +111,11 @@ export async function chatGateway(app: FastifyInstance) {
           send(socket, { type: 'pong' })
         }
       } catch (err) {
-        send(socket, { type: 'error', message: 'Failed to process message' })
+        const message =
+          err instanceof Error && err.message === 'RATE_LIMITED'
+            ? 'Zu viele Nachrichten — bitte kurz warten.'
+            : 'Failed to process message'
+        send(socket, { type: 'error', message })
       }
     })
 

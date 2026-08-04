@@ -17,6 +17,8 @@ import { kycRoutes } from './routes/kyc.routes.js'
 import { notificationsRoutes } from './routes/notifications.routes.js'
 import { stripeRoutes } from './routes/stripe.routes.js'
 import { listingRoutes } from './routes/listing.routes.js'
+import { legalRoutes } from './routes/legal.routes.js'
+import { supportRoutes } from './routes/support.routes.js'
 import { chatGateway } from './ws/chat.gateway.js'
 
 export async function buildApp() {
@@ -67,6 +69,8 @@ export async function buildApp() {
   await app.register(notificationsRoutes, { prefix: '/api/notifications' })
   await app.register(stripeRoutes, { prefix: '/api/stripe' })
   await app.register(listingRoutes, { prefix: '/api/listings' })
+  await app.register(legalRoutes, { prefix: '/api/legal-docs' })
+  await app.register(supportRoutes, { prefix: '/api/support' })
 
   // Health check
   app.get('/health', async () => ({ status: 'ok', timestamp: new Date().toISOString() }))

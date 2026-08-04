@@ -28,6 +28,10 @@ const resetPasswordSchema = z.object({
   newPassword: z.string().min(8),
 })
 
+const mfaCodeSchema = z.object({ token: z.string().min(6).max(20) })
+const mfaChallengeSchema = z.object({ challengeToken: z.string(), token: z.string().min(6).max(20) })
+const mfaDisableSchema = z.object({ password: z.string() })
+
 export async function authRoutes(app: FastifyInstance) {
   // POST /auth/register
   app.post('/register', async (request, reply) => {
@@ -56,8 +60,13 @@ export async function authRoutes(app: FastifyInstance) {
 
     try {
       const user = await authService.loginUser(body.data.email, body.data.password)
-      const sessionToken = uuidv4()
 
+      if (user.mfaEnabled) {
+        const challengeToken = app.jwt.sign({ sub: user.id, mfaChallenge: true }, { expiresIn: '5m' })
+        return reply.send({ mfaRequired: true, challengeToken })
+      }
+
+      const sessionToken = uuidv4()
       await authService.createSession(
         user.id,
         sessionToken,
@@ -88,6 +97,81 @@ export async function authRoutes(app: FastifyInstance) {
       if (message === 'INVALID_CREDENTIALS') return reply.status(401).send({ error: 'INVALID_CREDENTIALS' })
       if (message === 'ACCOUNT_SUSPENDED') return reply.status(403).send({ error: 'ACCOUNT_SUSPENDED' })
       throw err
+    }
+  })
+
+  // POST /auth/mfa/challenge — complete login after an MFA-required response
+  app.post('/mfa/challenge', async (request, reply) => {
+    const body = mfaChallengeSchema.safeParse(request.body)
+    if (!body.success) return reply.status(400).send({ error: 'VALIDATION_ERROR' })
+
+    let userId: string
+    try {
+      const payload = app.jwt.verify<{ sub: string; mfaChallenge?: boolean }>(body.data.challengeToken)
+      if (!payload.mfaChallenge) throw new Error('INVALID_CHALLENGE')
+      userId = payload.sub
+    } catch {
+      return reply.status(401).send({ error: 'CHALLENGE_EXPIRED' })
+    }
+
+    const ok = await authService.verifyMfaLogin(userId, body.data.token)
+    if (!ok) return reply.status(401).send({ error: 'INVALID_CODE' })
+
+    const user = await authService.getUserById(userId)
+    if (!user) return reply.status(404).send({ error: 'USER_NOT_FOUND' })
+
+    const sessionToken = uuidv4()
+    await authService.createSession(user.id, sessionToken, request.headers['user-agent'], request.ip)
+    const token = app.jwt.sign({ sub: user.id, role: user.role, sessionToken })
+
+    return reply.send({
+      token,
+      user: {
+        id: user.id,
+        email: user.email,
+        displayName: user.displayName,
+        role: user.role,
+        emailVerified: user.emailVerified,
+        phoneVerified: user.phoneVerified,
+        verificationStatus: user.verificationStatus,
+      },
+    })
+  })
+
+  // POST /auth/mfa/setup — begin enabling MFA for the current account
+  app.post('/mfa/setup', { preHandler: requireAuth }, async (request, reply) => {
+    try {
+      const result = await authService.startMfaSetup(request.userId)
+      return reply.send(result)
+    } catch (err: unknown) {
+      return reply.status(400).send({ error: err instanceof Error ? err.message : 'ERROR' })
+    }
+  })
+
+  // POST /auth/mfa/verify-setup — confirm the code and turn MFA on
+  app.post('/mfa/verify-setup', { preHandler: requireAuth }, async (request, reply) => {
+    const body = mfaCodeSchema.safeParse(request.body)
+    if (!body.success) return reply.status(400).send({ error: 'VALIDATION_ERROR' })
+
+    try {
+      const result = await authService.confirmMfaSetup(request.userId, body.data.token)
+      return reply.send(result)
+    } catch (err: unknown) {
+      return reply.status(400).send({ error: err instanceof Error ? err.message : 'ERROR' })
+    }
+  })
+
+  // POST /auth/mfa/disable
+  app.post('/mfa/disable', { preHandler: requireAuth }, async (request, reply) => {
+    const body = mfaDisableSchema.safeParse(request.body)
+    if (!body.success) return reply.status(400).send({ error: 'VALIDATION_ERROR' })
+
+    try {
+      await authService.disableMfa(request.userId, body.data.password)
+      return reply.send({ message: 'MFA deaktiviert.' })
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'ERROR'
+      return reply.status(msg === 'INVALID_CREDENTIALS' ? 401 : 400).send({ error: msg })
     }
   })
 

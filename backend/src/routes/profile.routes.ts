@@ -2,6 +2,7 @@ import type { FastifyInstance } from 'fastify'
 import { z } from 'zod'
 import * as profileService from '../services/profile.service.js'
 import * as providerService from '../services/provider.service.js'
+import * as gdprService from '../services/gdpr.service.js'
 import { requireAuth, requireRole } from '../middleware/auth.middleware.js'
 import { prisma } from '../config/prisma.js'
 
@@ -97,6 +98,30 @@ export async function profileRoutes(app: FastifyInstance) {
     try {
       const profile = await profileService.updateMyProfile(request.userId, body.data)
       return reply.send({ profile })
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'ERROR'
+      return reply.status(400).send({ error: msg })
+    }
+  })
+
+  // GET /profile/export — GDPR Art. 15/20: download all my data
+  app.get('/export', { preHandler: requireAuth }, async (request, reply) => {
+    try {
+      const data = await gdprService.exportUserData(request.userId)
+      return reply
+        .header('Content-Disposition', 'attachment; filename="meine-daten.json"')
+        .send(data)
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'ERROR'
+      return reply.status(404).send({ error: msg })
+    }
+  })
+
+  // DELETE /profile — GDPR Art. 17: delete my account
+  app.delete('/', { preHandler: requireAuth }, async (request, reply) => {
+    try {
+      await gdprService.deleteUserAccount(request.userId)
+      return reply.send({ message: 'Konto gelöscht.' })
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'ERROR'
       return reply.status(400).send({ error: msg })

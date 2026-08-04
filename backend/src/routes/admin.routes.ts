@@ -7,6 +7,8 @@ import type { Prisma } from '@prisma/client'
 import { prisma } from '../config/prisma.js'
 import { requireRole } from '../middleware/auth.middleware.js'
 import { updateKycStatus } from '../services/provider.service.js'
+import { getKycDocuments } from '../services/kyc.service.js'
+import * as supportService from '../services/support.service.js'
 import { sendPushToUser } from '../services/push.service.js'
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -56,6 +58,10 @@ const legalTypeMap: Record<string, string> = {
   privacy_policy: 'DATENSCHUTZ',
   impressum: 'IMPRESSUM',
   cancellation: 'WIDERRUF',
+  dispute_policy: 'STREITSCHLICHTUNG',
+  review_policy: 'BEWERTUNGSRICHTLINIE',
+  cookie_policy: 'COOKIE_RICHTLINIE',
+  provider_terms: 'ANBIETER_AGB',
 }
 
 const legalReverseTypeMap: Record<string, string> = Object.fromEntries(
@@ -91,6 +97,19 @@ const recommendDisputeSchema = z.object({
     'ESCALATED',
   ] as const),
   note: z.string().min(10).max(2000),
+})
+
+const assignTicketSchema = z.object({
+  assignedToId: z.string().uuid(),
+})
+
+const updateTicketStatusSchema = z.object({
+  status: z.enum(['OPEN', 'IN_PROGRESS', 'RESOLVED', 'CLOSED'] as const),
+})
+
+const ticketStaffMessageSchema = z.object({
+  content: z.string().min(1).max(2000),
+  isInternal: z.boolean().optional(),
 })
 
 const commissionRuleSchema = z.object({
@@ -284,6 +303,17 @@ export async function adminRoutes(app: FastifyInstance) {
       } catch (err: unknown) {
         return reply.status(404).send({ error: errMsg(err) })
       }
+    }
+  )
+
+  // GET /admin/users/:id/kyc-documents
+  app.get(
+    '/users/:id/kyc-documents',
+    { preHandler: requireRole('ADMIN') },
+    async (request, reply) => {
+      const { id } = request.params as { id: string }
+      const documents = await getKycDocuments(id)
+      return reply.send({ documents })
     }
   )
 
@@ -732,6 +762,156 @@ export async function adminRoutes(app: FastifyInstance) {
       )
 
       return reply.send({ dispute: updated })
+    }
+  )
+
+  // ── Support Tickets ──────────────────────────────────────────────────────
+
+  // GET /admin/support-tickets
+  app.get(
+    '/support-tickets',
+    { preHandler: requireRole('ADMIN', 'HELP_DESK') },
+    async (request, reply) => {
+      const query = z
+        .object({
+          status: z.enum(['OPEN', 'IN_PROGRESS', 'RESOLVED', 'CLOSED'] as const).optional(),
+          assignedToId: z.string().uuid().optional(),
+          ...paginationSchema.shape,
+        })
+        .parse(request.query)
+
+      const where: Prisma.SupportTicketWhereInput = {}
+      where.status = query.status ?? { in: ['OPEN', 'IN_PROGRESS'] }
+      if (query.assignedToId) where.assignedToId = query.assignedToId
+
+      const offset = query.page != null ? (query.page - 1) * query.limit : query.offset
+
+      const [total, tickets] = await Promise.all([
+        prisma.supportTicket.count({ where }),
+        prisma.supportTicket.findMany({
+          where,
+          orderBy: [{ status: 'asc' }, { createdAt: 'asc' }],
+          take: query.limit,
+          skip: offset,
+        }),
+      ])
+
+      const userIds = [...new Set(tickets.map((t) => t.userId))]
+      const users = await prisma.user.findMany({
+        where: { id: { in: userIds } },
+        select: { id: true, displayName: true, email: true },
+      })
+      const userById = new Map(users.map((u) => [u.id, u]))
+
+      const data = tickets.map((t) => ({ ...t, user: userById.get(t.userId) ?? null }))
+
+      return reply.send({ data, total, hasMore: offset + query.limit < total })
+    }
+  )
+
+  // GET /admin/support-tickets/:id
+  app.get(
+    '/support-tickets/:id',
+    { preHandler: requireRole('ADMIN', 'HELP_DESK') },
+    async (request, reply) => {
+      const { id } = request.params as { id: string }
+      const ticket = await prisma.supportTicket.findUnique({
+        where: { id },
+        include: { messages: { orderBy: { createdAt: 'asc' } } },
+      })
+      if (!ticket) return reply.status(404).send({ error: 'TICKET_NOT_FOUND' })
+
+      const senderIds = [...new Set([ticket.userId, ...ticket.messages.map((m) => m.senderId)])]
+      const users = await prisma.user.findMany({
+        where: { id: { in: senderIds } },
+        select: { id: true, displayName: true, email: true, role: true },
+      })
+      const userById = new Map(users.map((u) => [u.id, u]))
+
+      return reply.send({
+        ticket: {
+          ...ticket,
+          user: userById.get(ticket.userId) ?? null,
+          messages: ticket.messages.map((m) => ({ ...m, sender: userById.get(m.senderId) ?? null })),
+        },
+      })
+    }
+  )
+
+  // POST /admin/support-tickets/:id/messages — staff reply (can be internal)
+  app.post(
+    '/support-tickets/:id/messages',
+    { preHandler: requireRole('ADMIN', 'HELP_DESK') },
+    async (request, reply) => {
+      const { id } = request.params as { id: string }
+      const body = ticketStaffMessageSchema.safeParse(request.body)
+      if (!body.success) return reply.status(400).send({ error: 'VALIDATION_ERROR', details: body.error.flatten() })
+
+      try {
+        const message = await supportService.sendTicketMessage(
+          id,
+          request.userId,
+          body.data.content,
+          body.data.isInternal ?? false,
+          true,
+        )
+        return reply.status(201).send({ message })
+      } catch (err: unknown) {
+        return reply.status(400).send({ error: errMsg(err) })
+      }
+    }
+  )
+
+  // PATCH /admin/support-tickets/:id/assign
+  app.patch(
+    '/support-tickets/:id/assign',
+    { preHandler: requireRole('ADMIN', 'HELP_DESK') },
+    async (request, reply) => {
+      const { id } = request.params as { id: string }
+      const body = assignTicketSchema.safeParse(request.body)
+      if (!body.success) return reply.status(400).send({ error: 'VALIDATION_ERROR', details: body.error.flatten() })
+
+      const ticket = await prisma.supportTicket.findUnique({ where: { id } })
+      if (!ticket) return reply.status(404).send({ error: 'TICKET_NOT_FOUND' })
+
+      const updated = await prisma.supportTicket.update({
+        where: { id },
+        data: {
+          assignedToId: body.data.assignedToId,
+          status: ticket.status === 'OPEN' ? 'IN_PROGRESS' : ticket.status,
+        },
+      })
+
+      await writeAuditLog(request.userId, 'SUPPORT_TICKET_ASSIGNED', 'SupportTicket', id, {
+        assignedToId: body.data.assignedToId,
+      })
+
+      return reply.send({ ticket: updated })
+    }
+  )
+
+  // PATCH /admin/support-tickets/:id/status
+  app.patch(
+    '/support-tickets/:id/status',
+    { preHandler: requireRole('ADMIN', 'HELP_DESK') },
+    async (request, reply) => {
+      const { id } = request.params as { id: string }
+      const body = updateTicketStatusSchema.safeParse(request.body)
+      if (!body.success) return reply.status(400).send({ error: 'VALIDATION_ERROR', details: body.error.flatten() })
+
+      const ticket = await prisma.supportTicket.findUnique({ where: { id } })
+      if (!ticket) return reply.status(404).send({ error: 'TICKET_NOT_FOUND' })
+
+      const updated = await prisma.supportTicket.update({
+        where: { id },
+        data: { status: body.data.status },
+      })
+
+      await writeAuditLog(request.userId, 'SUPPORT_TICKET_STATUS_CHANGED', 'SupportTicket', id, {
+        status: body.data.status,
+      })
+
+      return reply.send({ ticket: updated })
     }
   )
 

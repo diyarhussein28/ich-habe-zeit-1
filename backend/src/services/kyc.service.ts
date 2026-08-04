@@ -86,12 +86,12 @@ export async function submitKycForReview(userId: string) {
   return user
 }
 
-export async function getKycDocumentFile(id: string, userId: string) {
+export async function getKycDocumentFile(id: string, userId: string, userRole: string) {
   const doc = await prisma.kycDocument.findUnique({ where: { id } })
   if (!doc) throw new Error('NOT_FOUND')
 
-  // Allow the owner or admins (caller must already be verified by middleware)
-  if (doc.userId !== userId) throw new Error('FORBIDDEN')
+  // Allow the owner or admins reviewing KYC
+  if (doc.userId !== userId && userRole !== 'ADMIN') throw new Error('FORBIDDEN')
 
   const absPath = path.resolve('uploads', doc.fileKey)
   return { absPath, mimeType: doc.mimeType, fileName: doc.fileName }

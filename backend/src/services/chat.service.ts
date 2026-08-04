@@ -2,6 +2,24 @@ import { prisma } from '../config/prisma.js'
 
 const CONTACT_REGEX = /(\+\d{7,15}|@\S+\.\S+|\d{10,11}|[\w.]+@[\w.]+\.\w+)/i
 
+// ─── Rate limiting: max 20 messages/min per user, across REST and WebSocket ───
+
+const RATE_LIMIT_MAX = 20
+const RATE_LIMIT_WINDOW_MS = 60_000
+const recentSendTimestamps = new Map<string, number[]>()
+
+function enforceRateLimit(senderId: string) {
+  const now = Date.now()
+  const recent = (recentSendTimestamps.get(senderId) ?? []).filter(
+    (t) => now - t < RATE_LIMIT_WINDOW_MS
+  )
+  if (recent.length >= RATE_LIMIT_MAX) {
+    throw new Error('RATE_LIMITED')
+  }
+  recent.push(now)
+  recentSendTimestamps.set(senderId, recent)
+}
+
 export async function getChatForOrder(orderId: string, userId: string) {
   const order = await prisma.order.findUnique({
     where: { id: orderId },
@@ -40,6 +58,8 @@ export async function sendMessage(
   const isCustomer = order.customerId === senderId
   const isProvider = order.offer.provider.userId === senderId
   if (!isCustomer && !isProvider) throw new Error('FORBIDDEN')
+
+  enforceRateLimit(senderId)
 
   // Detect off-platform contact sharing
   if (CONTACT_REGEX.test(content)) {

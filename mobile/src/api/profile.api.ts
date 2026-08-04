@@ -26,4 +26,7 @@ export const profileApi = {
 
   setProviderCategories: (categoryIds: string[]) =>
     apiClient.put<{ categories: ProfileCategory[] }>('/api/profile/provider/categories', { categoryIds }),
+
+  deleteAccount: () =>
+    apiClient.delete<{ message: string }>('/api/profile'),
 }

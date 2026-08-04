@@ -37,6 +37,7 @@ function RootLayoutInner() {
       <Stack.Screen name="(customer)" />
       <Stack.Screen name="(provider)" />
       <Stack.Screen name="chat" />
+      <Stack.Screen name="support" />
       <Stack.Screen name="+not-found" />
     </Stack>
   )

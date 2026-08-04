@@ -6,6 +6,7 @@ import {
   handleWebhookEvent,
   confirmOrderPayment,
 } from '../services/stripe.service.js'
+import { openDisputeFromChargeback } from '../services/dispute.service.js'
 import { prisma } from '../config/prisma.js'
 import { env } from '../config/env.js'
 
@@ -136,6 +137,25 @@ export async function stripeRoutes(app: FastifyInstance) {
                 where: { stripeConnectAccountId: account.id },
                 data: { stripeConnectEnabled: true },
               })
+            }
+            break
+          }
+
+          case 'charge.dispute.created': {
+            // Bank-initiated chargeback — freeze the order the same way an
+            // in-app dispute would, so payout can't happen while it's contested.
+            const stripeDispute = event.data.object
+            const paymentIntentId =
+              typeof stripeDispute.payment_intent === 'string'
+                ? stripeDispute.payment_intent
+                : stripeDispute.payment_intent?.id
+            if (paymentIntentId) {
+              const order = await prisma.order.findFirst({
+                where: { mangopayPayInId: paymentIntentId },
+              })
+              if (order) {
+                await openDisputeFromChargeback(order.id, stripeDispute.id)
+              }
             }
             break
           }

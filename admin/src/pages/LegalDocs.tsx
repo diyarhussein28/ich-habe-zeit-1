@@ -7,9 +7,14 @@ import { formatDateTime } from '@/lib/utils'
 import { apiError } from '@/api/client'
 
 const DOC_LABELS: Record<string, string> = {
-  AGB:         'Allgemeine Geschäftsbedingungen',
-  DATENSCHUTZ: 'Datenschutzerklärung',
-  IMPRESSUM:   'Impressum',
+  AGB:                 'Allgemeine Geschäftsbedingungen',
+  DATENSCHUTZ:         'Datenschutzerklärung',
+  IMPRESSUM:           'Impressum',
+  WIDERRUF:            'Widerrufsbelehrung',
+  STREITSCHLICHTUNG:   'Streitschlichtungsrichtlinie',
+  BEWERTUNGSRICHTLINIE: 'Bewertungsrichtlinie',
+  COOKIE_RICHTLINIE:   'Cookie-Richtlinie',
+  ANBIETER_AGB:        'Anbieter-AGB',
 }
 
 export default function LegalDocs() {

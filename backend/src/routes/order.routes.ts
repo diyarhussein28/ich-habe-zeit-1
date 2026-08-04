@@ -207,9 +207,9 @@ export async function orderRoutes(app: FastifyInstance) {
     const { id } = request.params as { id: string }
     try {
       // Stripe: capture + transfer to provider
-      await releaseOrderPayment(id)
+      const { transferId } = await releaseOrderPayment(id)
       // DB: mark order released
-      const order = await orderService.releasePayment(id, request.userId)
+      const order = await orderService.releasePayment(id, request.userId, transferId)
 
       const fullOrder = await prisma.order.findUnique({
         where: { id },
@@ -286,7 +286,8 @@ export async function orderRoutes(app: FastifyInstance) {
       return reply.status(201).send({ message })
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'ERROR'
-      return reply.status(msg === 'FORBIDDEN' ? 403 : 400).send({ error: msg })
+      const status = msg === 'FORBIDDEN' ? 403 : msg === 'RATE_LIMITED' ? 429 : 400
+      return reply.status(status).send({ error: msg })
     }
   })
 

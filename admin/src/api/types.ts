@@ -11,7 +11,51 @@ export type OrderStatus =
 
 export type DisputeOutcome =
   | 'FULL_RELEASE' | 'FULL_REFUND' | 'PARTIAL_RELEASE'
-  | 'CLOSE_IN_FAVOR_OF_CUSTOMER' | 'CLOSE_IN_FAVOR_OF_PROVIDER'
+  | 'REWORK_AGREEMENT' | 'ESCALATED'
+
+export type KycDocumentType = 'ID_FRONT' | 'ID_BACK' | 'SELFIE_WITH_ID'
+
+export interface KycDocument {
+  id: string
+  type: KycDocumentType
+  fileName: string
+  mimeType: string
+  status: 'UPLOADED' | 'APPROVED' | 'REJECTED' | 'RESUBMISSION_REQUIRED'
+  createdAt: string
+}
+
+export type TicketStatus = 'OPEN' | 'IN_PROGRESS' | 'RESOLVED' | 'CLOSED'
+
+export interface SupportTicketUser {
+  id: string
+  displayName: string
+  email: string
+  role?: UserRole
+}
+
+export interface SupportMessage {
+  id: string
+  ticketId: string
+  senderId: string
+  content: string
+  isInternal: boolean
+  createdAt: string
+  sender?: SupportTicketUser | null
+}
+
+export interface SupportTicket {
+  id: string
+  userId: string
+  subject: string
+  description: string
+  status: TicketStatus
+  assignedToId: string | null
+  orderId: string | null
+  createdAt: string
+  updatedAt: string
+  user?: SupportTicketUser | null
+  messages?: SupportMessage[]
+}
 
 export interface AdminStats {
   totalUsers: number
