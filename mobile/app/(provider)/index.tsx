@@ -70,19 +70,17 @@ export default function ProviderFeedScreen() {
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
       <View style={styles.header}>
-        <View>
-          <Text style={styles.greeting}>Hallo, {user?.displayName} 👋</Text>
-          <Text style={styles.sub}>Neue Aufträge in deiner Region</Text>
-        </View>
+        <Text style={styles.greeting} numberOfLines={1}>Hallo, {user?.displayName} 👋</Text>
+        <Text style={styles.sub}>Neue Aufträge in deiner Region</Text>
         <View style={styles.headerActions}>
           <TouchableOpacity onPress={() => router.push('/(provider)/listings')} style={styles.myRequestsBtn}>
-            <Text style={styles.myRequestsBtnText}>Inserate</Text>
+            <Text style={styles.myRequestsBtnText} numberOfLines={1}>Inserate</Text>
           </TouchableOpacity>
           <TouchableOpacity onPress={() => router.push('/(provider)/requests')} style={styles.myRequestsBtn}>
-            <Text style={styles.myRequestsBtnText}>Anfragen</Text>
+            <Text style={styles.myRequestsBtnText} numberOfLines={1}>Anfragen</Text>
           </TouchableOpacity>
           <TouchableOpacity onPress={() => router.push('/(customer)/requests/create')} style={styles.postBtn}>
-            <Text style={styles.postBtnText}>+ Auftrag</Text>
+            <Text style={styles.postBtnText} numberOfLines={1}>+ Auftrag</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -231,16 +229,13 @@ function FeedCard({
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.background },
   header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
     paddingHorizontal: spacing.lg,
     paddingTop: spacing.md,
     paddingBottom: spacing.sm,
   },
   greeting: { fontSize: fontSize.xl, fontWeight: fontWeight.bold, color: colors.text },
   sub: { fontSize: fontSize.sm, color: colors.textSecondary, marginTop: 2 },
-  headerActions: { flexDirection: 'row', gap: spacing.sm, alignItems: 'center' },
+  headerActions: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, alignItems: 'center', marginTop: spacing.md },
   myRequestsBtn: { paddingHorizontal: spacing.sm, paddingVertical: spacing.sm, borderRadius: radius.full, borderWidth: 1, borderColor: colors.primary },
   myRequestsBtnText: { fontSize: fontSize.xs, fontWeight: fontWeight.semibold, color: colors.primary },
   postBtn: { backgroundColor: colors.primary, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, borderRadius: radius.full },

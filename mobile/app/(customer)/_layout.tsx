@@ -65,6 +65,7 @@ export default function CustomerLayout() {
       <Tabs.Screen name="browse/[categoryId]" options={{ href: null }} />
       <Tabs.Screen name="listings/index" options={{ href: null }} />
       <Tabs.Screen name="listings/[id]" options={{ href: null }} />
+      <Tabs.Screen name="profile/invoices" options={{ href: null }} />
     </Tabs>
   )
 }

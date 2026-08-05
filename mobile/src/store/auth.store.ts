@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { getItem, setItem, deleteItem } from '../utils/storage'
+import { queryClient } from '../utils/queryClient'
 import { TOKEN_KEY } from '../api/client'
 import type { User } from '../api/types'
 
@@ -36,6 +37,9 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   },
 
   login: async (token: string, user: User) => {
+    // Guard against any leftover cache from a previous session on this device
+    // (e.g. a different account was logged in) before priming a new one.
+    queryClient.clear()
     await setItem(TOKEN_KEY, token)
     await setItem('ihz_user', JSON.stringify(user))
     set({ token, user })
@@ -53,5 +57,6 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     await deleteItem(TOKEN_KEY)
     await deleteItem('ihz_user')
     set({ token: null, user: null })
+    queryClient.clear()
   },
 }))

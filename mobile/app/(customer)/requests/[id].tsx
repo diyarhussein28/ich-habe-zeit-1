@@ -8,6 +8,9 @@ import {
   Alert,
   ActivityIndicator,
   Modal,
+  TextInput,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native'
 import { useLocalSearchParams, useRouter } from 'expo-router'
 import { SafeAreaView } from 'react-native-safe-area-context'
@@ -17,6 +20,7 @@ import { Card } from '../../../src/components/ui/Card'
 import { Badge } from '../../../src/components/ui/Badge'
 import { Button } from '../../../src/components/ui/Button'
 import { StarRating } from '../../../src/components/ui/StarRating'
+import { ConfirmModal } from '../../../src/components/ui/ConfirmModal'
 import { getApiErrorMessage } from '../../../src/api/client'
 import { colors, spacing, fontSize, fontWeight, radius, shadow } from '../../../src/constants/theme'
 import { formatEur } from '../../../src/utils/currency'
@@ -55,6 +59,11 @@ export default function RequestDetailScreen() {
   const qc = useQueryClient()
   const [selectedOffer, setSelectedOffer] = useState<Offer | null>(null)
   const [acceptError, setAcceptError] = useState<string | null>(null)
+  const [rejectTarget, setRejectTarget] = useState<Offer | null>(null)
+  const [counterTarget, setCounterTarget] = useState<Offer | null>(null)
+  const [counterPrice, setCounterPrice] = useState('')
+  const [counterMessage, setCounterMessage] = useState('')
+  const [counterError, setCounterError] = useState('')
 
   const { data: request, isLoading } = useQuery({
     queryKey: ['request', id],
@@ -93,6 +102,32 @@ export default function RequestDetailScreen() {
       router.replace('/(customer)/orders')
     },
     onError: (err) => setAcceptError(getApiErrorMessage(err)),
+  })
+
+  const rejectMutation = useMutation({
+    mutationFn: (offerId: string) => requestsApi.rejectOffer(offerId),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['request-offers', id] })
+      qc.invalidateQueries({ queryKey: ['request', id] })
+      setRejectTarget(null)
+    },
+    onError: (err) => {
+      Alert.alert('Fehler', getApiErrorMessage(err))
+      setRejectTarget(null)
+    },
+  })
+
+  const counterMutation = useMutation({
+    mutationFn: () => requestsApi.counterOffer(counterTarget!.id, Number(counterPrice), counterMessage.trim() || undefined),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['request-offers', id] })
+      qc.invalidateQueries({ queryKey: ['request', id] })
+      setCounterTarget(null)
+      setCounterPrice('')
+      setCounterMessage('')
+      setCounterError('')
+    },
+    onError: (err) => setCounterError(getApiErrorMessage(err)),
   })
 
   if (isLoading) {
@@ -194,6 +229,13 @@ export default function RequestDetailScreen() {
                   offer={offer}
                   canAccept={canAcceptOffer && offer.status === 'PENDING'}
                   onAccept={() => setSelectedOffer(offer)}
+                  onReject={() => setRejectTarget(offer)}
+                  onCounter={() => {
+                    setCounterTarget(offer)
+                    setCounterPrice(String(offer.proposedPrice ?? offer.price ?? ''))
+                    setCounterMessage('')
+                    setCounterError('')
+                  }}
                 />
               ))
             )}
@@ -249,6 +291,79 @@ export default function RequestDetailScreen() {
           </View>
         </View>
       </Modal>
+
+      {/* Reject offer confirmation */}
+      <ConfirmModal
+        visible={!!rejectTarget}
+        title="Angebot ablehnen?"
+        message={`Das Angebot von ${rejectTarget?.provider?.user?.displayName ?? 'diesem Dienstleister'} wird abgelehnt.`}
+        confirmLabel="Ablehnen"
+        destructive
+        loading={rejectMutation.isPending}
+        onConfirm={() => rejectMutation.mutate(rejectTarget!.id)}
+        onCancel={() => setRejectTarget(null)}
+      />
+
+      {/* Counter-offer sheet */}
+      <Modal
+        visible={!!counterTarget}
+        animationType="slide"
+        transparent
+        onRequestClose={() => { setCounterTarget(null); setCounterError('') }}
+      >
+        <KeyboardAvoidingView style={styles.modalOverlay} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+          <View style={styles.modalSheet}>
+            <Text style={styles.modalTitle}>Gegenangebot senden</Text>
+            <Text style={styles.offerSummaryMsg}>
+              Das aktuelle Angebot wird abgelehnt und der Dienstleister wird eingeladen, ein neues Angebot zu deinem Preisvorschlag abzugeben.
+            </Text>
+
+            <Text style={styles.fieldLabel}>Dein Preisvorschlag (€)</Text>
+            <TextInput
+              style={styles.counterInput}
+              value={counterPrice}
+              onChangeText={setCounterPrice}
+              keyboardType="decimal-pad"
+              placeholder="z.B. 180"
+              placeholderTextColor={colors.textDisabled}
+            />
+
+            <Text style={styles.fieldLabel}>Nachricht (optional)</Text>
+            <TextInput
+              style={[styles.counterInput, styles.counterMessageInput]}
+              value={counterMessage}
+              onChangeText={setCounterMessage}
+              placeholder="z.B. Könnten Sie das für 180€ machen?"
+              placeholderTextColor={colors.textDisabled}
+              multiline
+            />
+
+            {counterError ? <Text style={styles.errorText}>{counterError}</Text> : null}
+
+            <View style={styles.modalActions}>
+              <Button
+                label="Abbrechen"
+                variant="outline"
+                onPress={() => { setCounterTarget(null); setCounterError('') }}
+                fullWidth={false}
+                style={styles.modalBtn}
+              />
+              <Button
+                label="Senden"
+                onPress={() => {
+                  const price = Number(counterPrice)
+                  if (!price || price <= 0) { setCounterError('Bitte gib einen gültigen Preis ein.'); return }
+                  setCounterError('')
+                  counterMutation.mutate()
+                }}
+                loading={counterMutation.isPending}
+                fullWidth={false}
+                style={styles.modalBtn}
+              />
+            </View>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
     </SafeAreaView>
   )
 }
@@ -257,10 +372,14 @@ function OfferCard({
   offer,
   canAccept,
   onAccept,
+  onReject,
+  onCounter,
 }: {
   offer: Offer
   canAccept: boolean
   onAccept: () => void
+  onReject: () => void
+  onCounter: () => void
 }) {
   const provider = offer.provider
   const name = provider?.user?.displayName ?? 'Dienstleister'
@@ -291,16 +410,23 @@ function OfferCard({
 
       <Text style={offerStyles.message} numberOfLines={4}>{offer.message}</Text>
 
-      <View style={offerStyles.footer}>
-        <Text style={offerStyles.validity}>
-          Gültig bis {formatDate(offer.validUntil)}
-        </Text>
-        {canAccept && (
-          <TouchableOpacity onPress={onAccept} style={offerStyles.acceptBtn}>
+      <Text style={offerStyles.validity}>
+        Gültig bis {formatDate(offer.validUntil)}
+      </Text>
+
+      {canAccept && (
+        <View style={offerStyles.actions}>
+          <TouchableOpacity onPress={onReject} style={[offerStyles.actionBtn, offerStyles.rejectBtn]}>
+            <Text style={offerStyles.rejectBtnText}>Ablehnen</Text>
+          </TouchableOpacity>
+          <TouchableOpacity onPress={onCounter} style={[offerStyles.actionBtn, offerStyles.counterBtn]}>
+            <Text style={offerStyles.counterBtnText}>Gegenangebot</Text>
+          </TouchableOpacity>
+          <TouchableOpacity onPress={onAccept} style={[offerStyles.actionBtn, offerStyles.acceptBtn]}>
             <Text style={offerStyles.acceptBtnText}>Annehmen ✓</Text>
           </TouchableOpacity>
-        )}
-      </View>
+        </View>
+      )}
     </Card>
   )
 }
@@ -349,15 +475,20 @@ const offerStyles = StyleSheet.create({
   ratingCount: { fontSize: fontSize.xs, color: colors.textSecondary },
   price: { fontSize: fontSize.xl, fontWeight: fontWeight.bold, color: colors.secondary },
   message: { fontSize: fontSize.sm, color: colors.textSecondary, lineHeight: 20, marginBottom: spacing.sm },
-  footer: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', borderTopWidth: 1, borderTopColor: colors.border, paddingTop: spacing.sm },
-  validity: { fontSize: fontSize.xs, color: colors.textDisabled },
-  acceptBtn: {
-    backgroundColor: colors.primary,
-    paddingHorizontal: spacing.md,
+  validity: { fontSize: fontSize.xs, color: colors.textDisabled, borderTopWidth: 1, borderTopColor: colors.border, paddingTop: spacing.sm, marginBottom: spacing.sm },
+  actions: { flexDirection: 'row', gap: spacing.xs },
+  actionBtn: {
+    flex: 1,
+    alignItems: 'center',
     paddingVertical: spacing.xs + 2,
     borderRadius: radius.full,
   },
-  acceptBtnText: { fontSize: fontSize.sm, fontWeight: fontWeight.semibold, color: colors.textInverse },
+  rejectBtn: { borderWidth: 1, borderColor: colors.border },
+  rejectBtnText: { fontSize: fontSize.xs, fontWeight: fontWeight.semibold, color: colors.textSecondary },
+  counterBtn: { borderWidth: 1, borderColor: colors.primary },
+  counterBtnText: { fontSize: fontSize.xs, fontWeight: fontWeight.semibold, color: colors.primary },
+  acceptBtn: { backgroundColor: colors.primary },
+  acceptBtnText: { fontSize: fontSize.xs, fontWeight: fontWeight.semibold, color: colors.textInverse },
 })
 
 const styles = StyleSheet.create({
@@ -384,6 +515,9 @@ const styles = StyleSheet.create({
   offerSummaryLabel: { fontSize: fontSize.md, color: colors.textSecondary },
   offerSummaryPrice: { fontSize: fontSize.xxl, fontWeight: fontWeight.bold, color: colors.secondary },
   offerSummaryMsg: { fontSize: fontSize.sm, color: colors.textSecondary, lineHeight: 20, marginBottom: spacing.md },
+  fieldLabel: { fontSize: fontSize.xs, fontWeight: fontWeight.semibold, color: colors.textSecondary, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: spacing.xs, marginTop: spacing.sm },
+  counterInput: { borderWidth: 1, borderColor: colors.border, borderRadius: radius.md, padding: spacing.sm, fontSize: fontSize.md, color: colors.text },
+  counterMessageInput: { minHeight: 70, textAlignVertical: 'top' },
   escrowInfo: { backgroundColor: colors.primaryLight, borderColor: colors.primary, marginBottom: spacing.lg },
   escrowText: { fontSize: fontSize.sm, color: colors.text, lineHeight: 20 },
   modalActions: { flexDirection: 'row', gap: spacing.md },

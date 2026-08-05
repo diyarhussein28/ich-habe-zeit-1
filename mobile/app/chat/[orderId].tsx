@@ -31,7 +31,7 @@ export default function ChatScreen() {
 
   const { data: orderData } = useQuery({
     queryKey: ['order', orderId],
-    queryFn: () => ordersApi.get(orderId).then((r) => (r.data as unknown as { order: typeof r.data }).order ?? r.data),
+    queryFn: () => ordersApi.get(orderId).then((r) => r.data.order),
     enabled: !!orderId,
   })
 

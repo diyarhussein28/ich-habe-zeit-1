@@ -135,6 +135,58 @@ export async function withdrawOffer(offerId: string, providerUserId: string) {
   return prisma.offer.update({ where: { id: offerId }, data: { status: 'WITHDRAWN' } })
 }
 
+// Customer declines a pending offer outright (no counter-suggestion).
+export async function rejectOffer(offerId: string, customerUserId: string) {
+  const offer = await prisma.offer.findFirst({
+    where: { id: offerId, status: 'PENDING', request: { customer: { userId: customerUserId } } },
+    include: { provider: true, request: true },
+  })
+  if (!offer) throw new Error('NOT_FOUND')
+
+  const updated = await prisma.offer.update({ where: { id: offerId }, data: { status: 'REJECTED' } })
+
+  // If this was the only/last pending offer, the request goes back to OPEN so other providers can still bid
+  const remainingPending = await prisma.offer.count({ where: { requestId: offer.requestId, status: 'PENDING' } })
+  if (remainingPending === 0 && offer.request.status === 'OFFER_RECEIVED') {
+    await prisma.serviceRequest.update({ where: { id: offer.requestId }, data: { status: 'OPEN' } })
+  }
+
+  return { offer: updated, providerUserId: offer.provider.userId, requestTitle: offer.request.title }
+}
+
+// Customer declines the offer but suggests a different price, inviting the
+// provider to submit a fresh offer. No negotiation thread is modeled — this
+// simply rejects the current offer and notifies the provider of the ask.
+export async function counterOffer(
+  offerId: string,
+  customerUserId: string,
+  counterPrice: number,
+  message?: string
+) {
+  const offer = await prisma.offer.findFirst({
+    where: { id: offerId, status: 'PENDING', request: { customer: { userId: customerUserId } } },
+    include: { provider: true, request: true },
+  })
+  if (!offer) throw new Error('NOT_FOUND')
+  if (counterPrice <= 0) throw new Error('INVALID_PRICE')
+
+  const updated = await prisma.offer.update({ where: { id: offerId }, data: { status: 'REJECTED' } })
+
+  const remainingPending = await prisma.offer.count({ where: { requestId: offer.requestId, status: 'PENDING' } })
+  if (remainingPending === 0 && offer.request.status === 'OFFER_RECEIVED') {
+    await prisma.serviceRequest.update({ where: { id: offer.requestId }, data: { status: 'OPEN' } })
+  }
+
+  return {
+    offer: updated,
+    providerUserId: offer.provider.userId,
+    requestId: offer.requestId,
+    requestTitle: offer.request.title,
+    counterPrice,
+    message,
+  }
+}
+
 export async function getProviderOffers(providerUserId: string, status?: string) {
   const provider = await prisma.providerProfile.findUnique({ where: { userId: providerUserId } })
   if (!provider) throw new Error('PROVIDER_NOT_FOUND')

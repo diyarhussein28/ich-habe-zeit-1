@@ -6,6 +6,7 @@ import {
   StyleSheet,
   Alert,
   KeyboardAvoidingView,
+  ScrollView,
   Platform,
   Switch,
 } from 'react-native'
@@ -48,7 +49,11 @@ export default function DeviceChallengeScreen() {
   return (
     <SafeAreaView style={styles.safe}>
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.kav}>
-        <View style={styles.content}>
+        <ScrollView
+          contentContainerStyle={styles.content}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
           <TouchableOpacity onPress={() => router.back()} style={styles.back}>
             <Text style={styles.backText}>← Zurück</Text>
           </TouchableOpacity>
@@ -78,7 +83,7 @@ export default function DeviceChallengeScreen() {
           </View>
 
           <Button label="Bestätigen" onPress={handleConfirm} loading={loading} style={{ marginTop: spacing.md }} />
-        </View>
+        </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
   )
@@ -87,7 +92,7 @@ export default function DeviceChallengeScreen() {
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.background },
   kav: { flex: 1 },
-  content: { flex: 1, padding: spacing.lg },
+  content: { flexGrow: 1, padding: spacing.lg },
   back: { marginBottom: spacing.xl },
   backText: { fontSize: fontSize.md, color: colors.primary, fontWeight: fontWeight.medium },
   emoji: { fontSize: 56, textAlign: 'center', marginBottom: spacing.lg },

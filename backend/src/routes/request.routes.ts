@@ -156,6 +156,56 @@ export async function requestRoutes(app: FastifyInstance) {
     }
   })
 
+  // POST /requests/offers/:offerId/reject — customer declines an offer
+  app.post('/offers/:offerId/reject', { preHandler: requireAuth }, async (request, reply) => {
+    if (request.userRole !== 'CUSTOMER') {
+      return reply.status(403).send({ error: 'CUSTOMERS_ONLY' })
+    }
+    const { offerId } = request.params as { offerId: string }
+    try {
+      const { offer, providerUserId, requestTitle } = await offerService.rejectOffer(offerId, request.userId)
+
+      notifyEvent({
+        userId: providerUserId,
+        pushType: 'OFFER_ACCEPTED', // reuse existing offer-status push category
+        title: 'Angebot abgelehnt',
+        body: `Der Kunde hat dein Angebot für "${requestTitle}" abgelehnt.`,
+      }).catch(() => {})
+
+      return reply.send({ offer })
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'ERROR'
+      return reply.status(msg === 'NOT_FOUND' ? 404 : 400).send({ error: msg })
+    }
+  })
+
+  // POST /requests/offers/:offerId/counter — customer declines but suggests a different price
+  app.post('/offers/:offerId/counter', { preHandler: requireAuth }, async (request, reply) => {
+    if (request.userRole !== 'CUSTOMER') {
+      return reply.status(403).send({ error: 'CUSTOMERS_ONLY' })
+    }
+    const { offerId } = request.params as { offerId: string }
+    const body = z.object({ counterPrice: z.number().positive(), message: z.string().max(500).optional() }).safeParse(request.body)
+    if (!body.success) return reply.status(400).send({ error: 'VALIDATION_ERROR', details: body.error.flatten() })
+
+    try {
+      const result = await offerService.counterOffer(offerId, request.userId, body.data.counterPrice, body.data.message)
+
+      notifyEvent({
+        userId: result.providerUserId,
+        pushType: 'OFFER_ACCEPTED',
+        title: 'Gegenangebot erhalten',
+        body: `Der Kunde schlägt ${result.counterPrice.toFixed(2)} € für "${result.requestTitle}" vor.${result.message ? ` „${result.message}"` : ''}`,
+        requestId: result.requestId,
+      }).catch(() => {})
+
+      return reply.send({ offer: result.offer })
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'ERROR'
+      return reply.status(msg === 'NOT_FOUND' ? 404 : 400).send({ error: msg })
+    }
+  })
+
   // ── Provider's own offers ────────────────────────────────────────────────
 
   // GET /requests/offers/mine — provider sees all their submitted offers

@@ -74,7 +74,7 @@ export default function CustomerOrdersScreen() {
         <Text style={styles.title}>Buchungen</Text>
       </View>
 
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterRow}>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filterScroll} contentContainerStyle={styles.filterRow}>
         {FILTERS.map((f) => (
           <TouchableOpacity
             key={f.key}
@@ -139,8 +139,9 @@ const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.background },
   header: { paddingHorizontal: spacing.lg, paddingVertical: spacing.md },
   title: { fontSize: fontSize.xl, fontWeight: fontWeight.bold, color: colors.text },
-  filterRow: { paddingHorizontal: spacing.lg, gap: spacing.xs, paddingBottom: spacing.sm },
-  filterChip: { paddingHorizontal: spacing.md, paddingVertical: spacing.xs, borderRadius: 999, borderWidth: 1, borderColor: colors.border, marginRight: spacing.xs },
+  filterScroll: { flexGrow: 0, flexShrink: 0 },
+  filterRow: { paddingHorizontal: spacing.lg, gap: spacing.xs, paddingBottom: spacing.sm, alignItems: 'center' },
+  filterChip: { paddingHorizontal: spacing.md, paddingVertical: spacing.xs, borderRadius: 999, borderWidth: 1, borderColor: colors.border, marginRight: spacing.xs, alignSelf: 'flex-start' },
   filterChipActive: { backgroundColor: colors.primary, borderColor: colors.primary },
   filterChipText: { fontSize: fontSize.xs, color: colors.textSecondary },
   filterChipTextActive: { color: colors.textInverse, fontWeight: fontWeight.medium },

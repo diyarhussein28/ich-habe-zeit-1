@@ -3,10 +3,10 @@ import type { Order, ChatMessage, PaginatedResponse } from './types'
 
 export const ordersApi = {
   list: (params?: { page?: number; limit?: number; status?: string }) =>
-    apiClient.get<PaginatedResponse<Order>>('/api/orders', { params }),
+    apiClient.get<{ orders: Order[] }>('/api/orders', { params }),
 
   get: (id: string) =>
-    apiClient.get<Order>(`/api/orders/${id}`),
+    apiClient.get<{ order: Order }>(`/api/orders/${id}`),
 
   initPayment: (id: string) =>
     apiClient.post<{ clientSecret: string; paymentIntentId: string; customerId: string; ephemeralKeySecret: string }>(`/api/orders/${id}/pay`),

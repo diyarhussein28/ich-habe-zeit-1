@@ -21,8 +21,8 @@ export default function ProviderDashboardScreen() {
   const router = useRouter()
 
   const { data: orders, isLoading } = useQuery({
-    queryKey: ['payout-history'],
-    queryFn: () => ordersApi.list({ limit: 200 }).then((r) => r.data.data),
+    queryKey: ['provider-dashboard-orders'],
+    queryFn: () => ordersApi.list({ limit: 200 }).then((r) => r.data.orders),
   })
 
   const { data: profile } = useQuery({

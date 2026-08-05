@@ -56,7 +56,7 @@ export default function ProviderOrderDetailScreen() {
 
   const { data: order, isLoading } = useQuery({
     queryKey: ['order', id],
-    queryFn: () => ordersApi.get(id).then((r) => r.data),
+    queryFn: () => ordersApi.get(id).then((r) => r.data.order),
     enabled: !!id,
   })
 

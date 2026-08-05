@@ -1,6 +1,6 @@
 import React, { useEffect } from 'react'
 import { Stack } from 'expo-router'
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { QueryClientProvider } from '@tanstack/react-query'
 import { GestureHandlerRootView } from 'react-native-gesture-handler'
 import { SafeAreaProvider } from 'react-native-safe-area-context'
 import { StatusBar } from 'expo-status-bar'
@@ -10,16 +10,8 @@ import { useAuthStore } from '../src/store/auth.store'
 import { useAccessibilityStore } from '../src/store/accessibility.store'
 import { setUnauthorizedHandler } from '../src/api/client'
 import { usePushNotifications } from '../src/hooks/usePushNotifications'
+import { queryClient } from '../src/utils/queryClient'
 import { colors } from '../src/constants/theme'
-
-const queryClient = new QueryClient({
-  defaultOptions: {
-    queries: {
-      retry: 1,
-      staleTime: 1000 * 60 * 5,
-    },
-  },
-})
 
 function RootLayoutInner() {
   const { hydrate, logout } = useAuthStore()

@@ -70,10 +70,7 @@ export default function CustomerOrderDetailScreen() {
 
   const { data: order, isLoading } = useQuery({
     queryKey: ['order', id],
-    queryFn: () => ordersApi.get(id).then((r) => {
-      const raw = r.data as unknown as { order?: typeof r.data }
-      return raw.order ?? r.data
-    }),
+    queryFn: () => ordersApi.get(id).then((r) => r.data.order),
     enabled: !!id,
   })
 

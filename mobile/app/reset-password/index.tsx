@@ -6,6 +6,7 @@ import {
   StyleSheet,
   Alert,
   KeyboardAvoidingView,
+  ScrollView,
   Platform,
 } from 'react-native'
 import { useRouter, useLocalSearchParams } from 'expo-router'
@@ -53,7 +54,7 @@ export default function ResetPasswordScreen() {
   return (
     <SafeAreaView style={styles.safe}>
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.kav}>
-        <View style={styles.content}>
+        <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
           {!done && (
             <TouchableOpacity onPress={() => router.replace('/(auth)/login')} style={styles.back}>
               <Text style={styles.backText}>← Zur Anmeldung</Text>
@@ -98,7 +99,7 @@ export default function ResetPasswordScreen() {
               <Button label="Passwort speichern" onPress={handleSubmit} loading={loading} style={{ marginTop: spacing.sm }} />
             </>
           )}
-        </View>
+        </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
   )
@@ -107,7 +108,7 @@ export default function ResetPasswordScreen() {
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.background },
   kav: { flex: 1 },
-  content: { flex: 1, padding: spacing.lg, justifyContent: 'center' },
+  content: { flexGrow: 1, padding: spacing.lg, justifyContent: 'center' },
   back: { position: 'absolute', top: spacing.lg, left: spacing.lg },
   backText: { fontSize: fontSize.md, color: colors.primary, fontWeight: fontWeight.medium },
   emoji: { fontSize: 56, textAlign: 'center', marginBottom: spacing.lg },

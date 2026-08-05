@@ -57,6 +57,12 @@ export const requestsApi = {
   withdrawOffer: (offerId: string) =>
     apiClient.post<Offer>(`/api/requests/offers/${offerId}/withdraw`),
 
+  rejectOffer: (offerId: string) =>
+    apiClient.post<{ offer: Offer }>(`/api/requests/offers/${offerId}/reject`),
+
+  counterOffer: (offerId: string, counterPrice: number, message?: string) =>
+    apiClient.post<{ offer: Offer }>(`/api/requests/offers/${offerId}/counter`, { counterPrice, message }),
+
   myOffers: (params?: { page?: number; limit?: number }) =>
     apiClient.get<{ offers: Offer[] }>('/api/requests/offers/mine', { params }),
 }
