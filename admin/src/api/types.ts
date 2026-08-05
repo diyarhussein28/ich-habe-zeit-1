@@ -192,6 +192,29 @@ export interface AdminUser {
   }
 }
 
+export interface AdminServiceArea {
+  id: string
+  homePlz: string
+  radiusKm: number
+  plzList: string[]
+}
+
+export interface AdminUserDetail extends Omit<AdminUser, 'providerProfile'> {
+  providerProfile?: {
+    id: string
+    averageRating: number
+    totalReviews: number
+    isKleinunternehmer: boolean
+    bio?: string
+    legalName?: string
+    vatNumber?: string
+    taxId?: string
+    stripeConnectAccountId?: string
+    stripeConnectEnabled: boolean
+    serviceAreas: AdminServiceArea[]
+  }
+}
+
 export interface AdminOrder {
   id: string
   status: OrderStatus

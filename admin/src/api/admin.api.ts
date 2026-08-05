@@ -1,6 +1,6 @@
 import { api } from './client'
 import type {
-  AdminStats, AdminUser, AdminOrder, AdminDispute,
+  AdminStats, AdminUser, AdminUserDetail, AdminServiceArea, AdminOrder, AdminDispute,
   Category, CategoryCustomField, CommissionRate, LegalDoc, KycDocument,
   VerificationStatus, DisputeOutcome, PaginatedResponse,
   SupportTicket, SupportMessage, TicketStatus,
@@ -20,7 +20,13 @@ export const adminApi = {
     api.get<PaginatedResponse<AdminUser>>('/api/admin/users', { params }),
 
   getUser: (id: string) =>
-    api.get<AdminUser>(`/api/admin/users/${id}`),
+    api.get<{ user: AdminUserDetail }>(`/api/admin/users/${id}`),
+
+  updateProviderServiceAreas: (userId: string, areas: Array<{ homePlz: string; radiusKm: number }>) =>
+    api.patch<{ areas: AdminServiceArea[] }>(`/api/admin/providers/${userId}/service-areas`, { areas }),
+
+  updateProviderTaxInfo: (userId: string, data: { isKleinunternehmer: boolean; legalName: string; vatNumber?: string; taxId?: string }) =>
+    api.patch(`/api/admin/providers/${userId}/tax-info`, data),
 
   updateKyc: (id: string, status: VerificationStatus, notes?: string) =>
     api.patch<AdminUser>(`/api/admin/users/${id}/kyc`, { status, notes }),

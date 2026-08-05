@@ -41,6 +41,3 @@ export const useAccessibilityStore = create<AccessibilityState>((set, get) => ({
     persist({ largeText: get().largeText, highContrast: value })
   },
 }))
-
-// Multiplier to apply to fontSize tokens when largeText is enabled.
-export const LARGE_TEXT_SCALE = 1.2

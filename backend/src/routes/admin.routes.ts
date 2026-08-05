@@ -572,6 +572,63 @@ export async function adminRoutes(app: FastifyInstance) {
     }
   )
 
+  // PATCH /admin/providers/:userId/service-areas — admin override
+  app.patch(
+    '/providers/:userId/service-areas',
+    { preHandler: requireRole('ADMIN') },
+    async (request, reply) => {
+      const { userId } = request.params as { userId: string }
+      const body = z
+        .object({
+          areas: z.array(
+            z.object({
+              homePlz: z.string().regex(/^\d{5}$/),
+              radiusKm: z.number().int().min(1).max(200),
+              plzList: z.array(z.string().regex(/^\d{5}$/)).optional(),
+            })
+          ),
+        })
+        .safeParse(request.body)
+      if (!body.success) return reply.status(400).send({ error: 'VALIDATION_ERROR', details: body.error.flatten() })
+
+      try {
+        const { setServiceAreas } = await import('../services/provider.service.js')
+        const areas = await setServiceAreas(userId, body.data.areas)
+        await writeAuditLog(request.userId, 'PROVIDER_SERVICE_AREAS_UPDATED', 'ProviderProfile', userId, { areas: body.data.areas }, userId)
+        return reply.send({ areas })
+      } catch (err: unknown) {
+        return reply.status(404).send({ error: errMsg(err) })
+      }
+    }
+  )
+
+  // PATCH /admin/providers/:userId/tax-info — admin override
+  app.patch(
+    '/providers/:userId/tax-info',
+    { preHandler: requireRole('ADMIN') },
+    async (request, reply) => {
+      const { userId } = request.params as { userId: string }
+      const body = z
+        .object({
+          isKleinunternehmer: z.boolean(),
+          legalName: z.string().min(1).max(200),
+          vatNumber: z.string().optional(),
+          taxId: z.string().optional(),
+        })
+        .safeParse(request.body)
+      if (!body.success) return reply.status(400).send({ error: 'VALIDATION_ERROR', details: body.error.flatten() })
+
+      try {
+        const { updateTaxInfo } = await import('../services/provider.service.js')
+        const profile = await updateTaxInfo(userId, body.data)
+        await writeAuditLog(request.userId, 'PROVIDER_TAX_INFO_UPDATED', 'ProviderProfile', userId, body.data, userId)
+        return reply.send({ profile })
+      } catch (err: unknown) {
+        return reply.status(404).send({ error: errMsg(err) })
+      }
+    }
+  )
+
   // ── Orders ───────────────────────────────────────────────────────────────
 
   // GET /admin/orders

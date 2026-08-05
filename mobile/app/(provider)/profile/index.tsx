@@ -14,6 +14,7 @@ import { Button } from '../../../src/components/ui/Button'
 import { colors, spacing, fontSize, fontWeight, radius } from '../../../src/constants/theme'
 import { LegalDocsAccordion } from '../../../src/components/LegalDocsAccordion'
 import { AccountDataActions } from '../../../src/components/AccountDataActions'
+import { ConfirmModal } from '../../../src/components/ui/ConfirmModal'
 
 const KYC_LABEL: Record<string, string> = {
   REGISTERED: 'Nicht verifiziert',
@@ -98,19 +99,14 @@ export default function ProviderProfileScreen() {
     }
   }
 
+  const [showLogoutConfirm, setShowLogoutConfirm] = useState(false)
+  const [loggingOut, setLoggingOut] = useState(false)
+
   const handleLogout = async () => {
-    Alert.alert('Abmelden', 'Möchtest du dich wirklich abmelden?', [
-      { text: 'Abbrechen', style: 'cancel' },
-      {
-        text: 'Abmelden',
-        style: 'destructive',
-        onPress: async () => {
-          try { await authApi.logout() } catch {}
-          await logout()
-          router.replace('/(auth)/login')
-        },
-      },
-    ])
+    setLoggingOut(true)
+    try { await authApi.logout() } catch {}
+    await logout()
+    router.replace('/(auth)/login')
   }
 
   if (!profile) return null
@@ -282,12 +278,25 @@ export default function ProviderProfileScreen() {
           <MenuItem emoji="🔒" label="Konto & Daten" onPress={() => setShowAccountData((v) => !v)} />
           {showAccountData && <AccountDataActions />}
           <Divider />
+          <MenuItem emoji="♿" label="Barrierefreiheit" onPress={() => router.push('/accessibility-settings')} />
+          <Divider />
           <MenuItem emoji="❓" label="Hilfe & Support" onPress={() => router.push('/support')} />
         </Card>
 
-        <Button label="Abmelden" variant="danger" onPress={handleLogout} style={styles.logoutBtn} />
+        <Button label="Abmelden" variant="danger" onPress={() => setShowLogoutConfirm(true)} style={styles.logoutBtn} />
         <Text style={styles.version}>Ich habe Zeit · Version 1.0.0</Text>
       </ScrollView>
+
+      <ConfirmModal
+        visible={showLogoutConfirm}
+        title="Abmelden"
+        message="Möchtest du dich wirklich abmelden?"
+        confirmLabel="Abmelden"
+        destructive
+        loading={loggingOut}
+        onConfirm={handleLogout}
+        onCancel={() => setShowLogoutConfirm(false)}
+      />
     </SafeAreaView>
   )
 }

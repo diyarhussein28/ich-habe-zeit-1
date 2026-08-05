@@ -1,4 +1,4 @@
-import React, { useState, forwardRef } from 'react'
+import React, { useState, forwardRef, useMemo } from 'react'
 import {
   View,
   TextInput,
@@ -8,7 +8,8 @@ import {
   TextInputProps,
   ViewStyle,
 } from 'react-native'
-import { colors, spacing, radius, fontSize } from '../../constants/theme'
+import { spacing, radius, fontSize, getAccessibleColors, scaleFont } from '../../constants/theme'
+import { useAccessibilityStore } from '../../store/accessibility.store'
 
 interface InputProps extends TextInputProps {
   label?: string
@@ -25,6 +26,9 @@ export const Input = forwardRef<TextInput, InputProps>(function Input(
   ref,
 ) {
   const [focused, setFocused] = useState(false)
+  const { largeText, highContrast } = useAccessibilityStore()
+  const colors = useMemo(() => getAccessibleColors(highContrast), [highContrast])
+  const styles = useMemo(() => makeStyles(colors, largeText), [colors, largeText])
 
   return (
     <View style={[styles.container, containerStyle]}>
@@ -64,34 +68,36 @@ export const Input = forwardRef<TextInput, InputProps>(function Input(
   )
 })
 
-const styles = StyleSheet.create({
-  container: { marginBottom: spacing.md },
-  label: {
-    fontSize: fontSize.sm,
-    fontWeight: '500',
-    color: colors.text,
-    marginBottom: spacing.xs,
-  },
-  inputWrapper: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: colors.surface,
-    borderWidth: 1.5,
-    borderColor: colors.border,
-    borderRadius: radius.md,
-  },
-  inputWrapperFocused: { borderColor: colors.borderFocus },
-  inputWrapperError: { borderColor: colors.error },
-  input: {
-    flex: 1,
-    paddingVertical: 14,
-    paddingHorizontal: spacing.md,
-    fontSize: fontSize.md,
-    color: colors.text,
-  },
-  inputWithLeft: { paddingLeft: spacing.xs },
-  iconLeft: { paddingLeft: spacing.md },
-  iconRight: { paddingRight: spacing.md },
-  error: { marginTop: spacing.xs, fontSize: fontSize.sm, color: colors.error },
-  hint: { marginTop: spacing.xs, fontSize: fontSize.sm, color: colors.textSecondary },
-})
+function makeStyles(colors: ReturnType<typeof getAccessibleColors>, largeText: boolean) {
+  return StyleSheet.create({
+    container: { marginBottom: spacing.md },
+    label: {
+      fontSize: scaleFont(fontSize.sm, largeText),
+      fontWeight: '500',
+      color: colors.text,
+      marginBottom: spacing.xs,
+    },
+    inputWrapper: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      backgroundColor: colors.surface,
+      borderWidth: 1.5,
+      borderColor: colors.border,
+      borderRadius: radius.md,
+    },
+    inputWrapperFocused: { borderColor: colors.borderFocus },
+    inputWrapperError: { borderColor: colors.error },
+    input: {
+      flex: 1,
+      paddingVertical: 14,
+      paddingHorizontal: spacing.md,
+      fontSize: scaleFont(fontSize.md, largeText),
+      color: colors.text,
+    },
+    inputWithLeft: { paddingLeft: spacing.xs },
+    iconLeft: { paddingLeft: spacing.md },
+    iconRight: { paddingRight: spacing.md },
+    error: { marginTop: spacing.xs, fontSize: scaleFont(fontSize.sm, largeText), color: colors.error },
+    hint: { marginTop: spacing.xs, fontSize: scaleFont(fontSize.sm, largeText), color: colors.textSecondary },
+  })
+}

@@ -209,6 +209,58 @@ async function removeRejectedContent(contentType: ModerationContentType, url: st
   }
 }
 
+// ─── Unusual rating pattern detection ─────────────────────────────────────────
+// Non-blocking: the rating is always accepted, this only logs a signal for
+// Admin to review (spec 11.4: "unusual review patterns flagged").
+
+const RATING_BURST_WINDOW_MS = 60 * 60 * 1000
+const RATING_BURST_THRESHOLD = 5
+const REPEATED_PAIR_THRESHOLD = 3
+
+export async function flagUnusualRatingPattern(data: {
+  raterUserId: string
+  side: 'customer' | 'provider'
+  raterProfileId: string
+  receiverProfileId: string
+}) {
+  const raterField = data.side === 'customer' ? 'customerRaterId' : 'providerRaterId'
+  const receiverField = data.side === 'customer' ? 'providerReceiverId' : 'customerReceiverId'
+
+  const [burstCount, pairCount] = await Promise.all([
+    prisma.rating.count({
+      where: {
+        [raterField]: data.raterProfileId,
+        createdAt: { gte: new Date(Date.now() - RATING_BURST_WINDOW_MS) },
+      },
+    }),
+    prisma.rating.count({
+      where: { [raterField]: data.raterProfileId, [receiverField]: data.receiverProfileId },
+    }),
+  ])
+
+  if (burstCount >= RATING_BURST_THRESHOLD) {
+    await prisma.auditLog.create({
+      data: {
+        actionType: 'RATING_BURST_DETECTED',
+        targetEntity: 'Rating',
+        targetUserId: data.raterUserId,
+        metadata: { ratingsInLastHour: burstCount },
+      },
+    })
+  }
+
+  if (pairCount >= REPEATED_PAIR_THRESHOLD) {
+    await prisma.auditLog.create({
+      data: {
+        actionType: 'REPEATED_RATING_PATTERN_DETECTED',
+        targetEntity: 'Rating',
+        targetUserId: data.raterUserId,
+        metadata: { receiverProfileId: data.receiverProfileId, totalRatingsToSameParty: pairCount },
+      },
+    })
+  }
+}
+
 // ─── Fraud pattern flags (surfaced on admin dashboard) ────────────────────────
 
 export async function getFraudSignals() {

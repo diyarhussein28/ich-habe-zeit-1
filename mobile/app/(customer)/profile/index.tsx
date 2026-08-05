@@ -22,6 +22,7 @@ import { colors, spacing, fontSize, fontWeight, radius } from '../../../src/cons
 import { formatDate } from '../../../src/utils/date'
 import { LegalDocsAccordion } from '../../../src/components/LegalDocsAccordion'
 import { AccountDataActions } from '../../../src/components/AccountDataActions'
+import { ConfirmModal } from '../../../src/components/ui/ConfirmModal'
 
 // Converts "DD.MM.YYYY" to an ISO date string. Returns undefined for an empty
 // input (no change) or null for an unparsable one (caller should show an error).
@@ -84,7 +85,11 @@ export default function CustomerProfileScreen() {
     onError: (err) => setSaveError(getApiErrorMessage(err)),
   })
 
+  const [showLogoutConfirm, setShowLogoutConfirm] = useState(false)
+  const [loggingOut, setLoggingOut] = useState(false)
+
   const handleLogout = async () => {
+    setLoggingOut(true)
     try { await authApi.logout() } catch {}
     await logout()
     router.replace('/(auth)/login')
@@ -211,6 +216,8 @@ export default function CustomerProfileScreen() {
           <Divider />
           <MenuItem emoji="📍" label="Meine Adressen" onPress={() => router.push('/addresses')} />
           <Divider />
+          <MenuItem emoji="💳" label="Zahlungsmethoden" onPress={() => router.push('/payment-methods')} />
+          <Divider />
           <MenuItem emoji="📄" label="Rechnungen" onPress={() => router.push('/(customer)/profile/invoices')} />
           <Divider />
           <MenuItem emoji="🔔" label="Benachrichtigungen" onPress={() => router.push('/notification-settings')} />
@@ -221,18 +228,31 @@ export default function CustomerProfileScreen() {
           <MenuItem emoji="🔒" label="Konto & Daten" onPress={() => setShowAccountData((v) => !v)} />
           {showAccountData && <AccountDataActions />}
           <Divider />
+          <MenuItem emoji="♿" label="Barrierefreiheit" onPress={() => router.push('/accessibility-settings')} />
+          <Divider />
           <MenuItem emoji="❓" label="Hilfe & Support" onPress={() => router.push('/support')} />
         </Card>
 
         <Button
           label="Abmelden"
           variant="danger"
-          onPress={handleLogout}
+          onPress={() => setShowLogoutConfirm(true)}
           style={styles.logoutBtn}
         />
 
         <Text style={styles.version}>Ich habe Zeit · Version 1.0.0</Text>
       </ScrollView>
+
+      <ConfirmModal
+        visible={showLogoutConfirm}
+        title="Abmelden"
+        message="Möchtest du dich wirklich abmelden?"
+        confirmLabel="Abmelden"
+        destructive
+        loading={loggingOut}
+        onConfirm={handleLogout}
+        onCancel={() => setShowLogoutConfirm(false)}
+      />
     </SafeAreaView>
   )
 }

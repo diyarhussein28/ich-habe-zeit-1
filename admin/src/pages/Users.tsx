@@ -1,9 +1,9 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Search } from 'lucide-react'
+import { Search, Plus, Trash2 } from 'lucide-react'
 import { adminApi } from '@/api/admin.api'
 import { Table, Thead, Th, Tbody, Tr, Td, EmptyRow } from '@/components/ui/Table'
-import { KycBadge, RoleBadge } from '@/components/ui/Badge'
+import { KycBadge, RoleBadge, Badge } from '@/components/ui/Badge'
 import { Modal } from '@/components/ui/Modal'
 import { PageSpinner, Spinner } from '@/components/ui/Spinner'
 import { KycDocumentGallery } from '@/components/KycDocumentGallery'
@@ -76,6 +76,52 @@ export default function Users() {
   })
 
   const transitions = selectedUser ? (KYC_TRANSITIONS[selectedUser.verificationStatus] ?? []) : []
+
+  // ── Provider Management (service areas, tax data, payout readiness) ──────
+  const [taxForm, setTaxForm] = useState({ isKleinunternehmer: true, legalName: '', vatNumber: '', taxId: '' })
+  const [areas, setAreas] = useState<Array<{ homePlz: string; radiusKm: number }>>([])
+  const [providerError, setProviderError] = useState('')
+
+  const { data: userDetail } = useQuery({
+    queryKey: ['admin-user-detail', selectedUser?.id],
+    queryFn: () => adminApi.getUser(selectedUser!.id).then((r) => r.data.user),
+    enabled: !!selectedUser && selectedUser.role === 'PROVIDER',
+  })
+
+  useEffect(() => {
+    if (userDetail?.providerProfile) {
+      setTaxForm({
+        isKleinunternehmer: userDetail.providerProfile.isKleinunternehmer,
+        legalName: userDetail.providerProfile.legalName ?? '',
+        vatNumber: userDetail.providerProfile.vatNumber ?? '',
+        taxId: userDetail.providerProfile.taxId ?? '',
+      })
+      setAreas(userDetail.providerProfile.serviceAreas.map((a) => ({ homePlz: a.homePlz, radiusKm: a.radiusKm })))
+    }
+  }, [userDetail])
+
+  const taxMutation = useMutation({
+    mutationFn: () => adminApi.updateProviderTaxInfo(selectedUser!.id, {
+      isKleinunternehmer: taxForm.isKleinunternehmer,
+      legalName: taxForm.legalName,
+      vatNumber: taxForm.vatNumber || undefined,
+      taxId: taxForm.taxId || undefined,
+    }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['admin-user-detail', selectedUser?.id] })
+      setProviderError('')
+    },
+    onError: (err) => setProviderError(apiError(err)),
+  })
+
+  const areasMutation = useMutation({
+    mutationFn: () => adminApi.updateProviderServiceAreas(selectedUser!.id, areas.filter((a) => /^\d{5}$/.test(a.homePlz))),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['admin-user-detail', selectedUser?.id] })
+      setProviderError('')
+    },
+    onError: (err) => setProviderError(apiError(err)),
+  })
 
   return (
     <div className="space-y-5">
@@ -202,15 +248,25 @@ export default function Users() {
       )}
 
       {/* KYC Modal */}
-      <Modal open={!!selectedUser} onClose={() => { setSelectedUser(null); setKycNotes(''); setError('') }} title={`KYC – ${selectedUser?.displayName}`}>
+      <Modal
+        open={!!selectedUser}
+        onClose={() => { setSelectedUser(null); setKycNotes(''); setError(''); setProviderError('') }}
+        title={`${selectedUser?.role === 'PROVIDER' ? 'Anbieter' : 'KYC'} – ${selectedUser?.displayName}`}
+        size="lg"
+      >
         {selectedUser && (
-          <div className="space-y-4">
+          <div className="space-y-4 max-h-[70vh] overflow-y-auto pr-1">
             <div className="rounded-lg bg-gray-50 p-4 text-sm space-y-1">
               <p><span className="text-gray-500">E-Mail:</span> {selectedUser.email}</p>
               <p><span className="text-gray-500">Telefon:</span> {selectedUser.phone}</p>
               <p className="flex items-center gap-2"><span className="text-gray-500">Status:</span> <KycBadge status={selectedUser.verificationStatus} /></p>
-              {selectedUser.providerProfile && (
-                <p><span className="text-gray-500">Kleinunternehmer:</span> {selectedUser.providerProfile.isKleinunternehmer ? 'Ja' : 'Nein'}</p>
+              {userDetail?.providerProfile && (
+                <p className="flex items-center gap-2">
+                  <span className="text-gray-500">Auszahlungsbereit:</span>
+                  {userDetail.providerProfile.stripeConnectEnabled
+                    ? <Badge label="Verbunden ✓" variant="success" />
+                    : <Badge label="Nicht verbunden" variant="warning" />}
+                </p>
               )}
             </div>
 
@@ -246,6 +302,86 @@ export default function Users() {
               </div>
             ) : (
               <p className="text-sm text-gray-500">Keine KYC-Aktionen verfügbar für diesen Status.</p>
+            )}
+
+            {selectedUser.role === 'PROVIDER' && (
+              <>
+                <hr className="border-gray-200" />
+
+                <div>
+                  <label className="label">Steuerangaben</label>
+                  <div className="space-y-2">
+                    <label className="flex items-center gap-2 text-sm text-gray-700">
+                      <input
+                        type="checkbox"
+                        checked={taxForm.isKleinunternehmer}
+                        onChange={(e) => setTaxForm((f) => ({ ...f, isKleinunternehmer: e.target.checked }))}
+                      />
+                      Kleinunternehmer (§ 19 UStG)
+                    </label>
+                    <input
+                      className="input"
+                      placeholder="Rechtlicher Name"
+                      value={taxForm.legalName}
+                      onChange={(e) => setTaxForm((f) => ({ ...f, legalName: e.target.value }))}
+                    />
+                    {!taxForm.isKleinunternehmer && (
+                      <input
+                        className="input"
+                        placeholder="USt-IdNr."
+                        value={taxForm.vatNumber}
+                        onChange={(e) => setTaxForm((f) => ({ ...f, vatNumber: e.target.value }))}
+                      />
+                    )}
+                    <input
+                      className="input"
+                      placeholder="Steuernummer (optional)"
+                      value={taxForm.taxId}
+                      onChange={(e) => setTaxForm((f) => ({ ...f, taxId: e.target.value }))}
+                    />
+                    <button className="btn-secondary btn-sm" disabled={taxMutation.isPending} onClick={() => taxMutation.mutate()}>
+                      {taxMutation.isPending ? <Spinner className="h-3.5 w-3.5" /> : 'Steuerangaben speichern'}
+                    </button>
+                  </div>
+                </div>
+
+                <div>
+                  <div className="flex items-center justify-between">
+                    <label className="label mb-0">Servicegebiete</label>
+                    <button className="btn-secondary btn-sm gap-1" onClick={() => setAreas((a) => [...a, { homePlz: '', radiusKm: 25 }])}>
+                      <Plus size={12} /> Gebiet
+                    </button>
+                  </div>
+                  <div className="space-y-2 mt-2">
+                    {areas.map((area, i) => (
+                      <div key={i} className="flex items-center gap-2">
+                        <input
+                          className="input flex-1"
+                          placeholder="PLZ"
+                          value={area.homePlz}
+                          onChange={(e) => setAreas((prev) => prev.map((a, idx) => (idx === i ? { ...a, homePlz: e.target.value } : a)))}
+                        />
+                        <input
+                          className="input w-28"
+                          type="number"
+                          placeholder="Radius km"
+                          value={area.radiusKm}
+                          onChange={(e) => setAreas((prev) => prev.map((a, idx) => (idx === i ? { ...a, radiusKm: Number(e.target.value) } : a)))}
+                        />
+                        <button className="p-1.5 text-gray-400 hover:text-red-600" onClick={() => setAreas((prev) => prev.filter((_, idx) => idx !== i))}>
+                          <Trash2 size={14} />
+                        </button>
+                      </div>
+                    ))}
+                    {areas.length === 0 && <p className="text-sm text-gray-400">Keine Servicegebiete festgelegt.</p>}
+                    <button className="btn-secondary btn-sm" disabled={areasMutation.isPending} onClick={() => areasMutation.mutate()}>
+                      {areasMutation.isPending ? <Spinner className="h-3.5 w-3.5" /> : 'Servicegebiete speichern'}
+                    </button>
+                  </div>
+                </div>
+
+                {providerError && <p className="text-sm text-red-600">{providerError}</p>}
+              </>
             )}
           </div>
         )}

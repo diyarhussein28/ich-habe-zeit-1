@@ -2,10 +2,88 @@ import Stripe from 'stripe'
 import { env } from '../config/env.js'
 import { prisma } from '../config/prisma.js'
 
+const STRIPE_API_VERSION = '2026-07-29.dahlia' as const
+
 export const stripe = new Stripe(env.STRIPE_SECRET_KEY, {
-  apiVersion: '2026-07-29.dahlia' as const,
+  apiVersion: STRIPE_API_VERSION,
   typescript: true,
 })
+
+// ─── Stripe Customer (required to save cards for reuse) ──────────────────────
+
+export async function ensureStripeCustomer(userId: string): Promise<string> {
+  const user = await prisma.user.findUnique({ where: { id: userId } })
+  if (!user) throw new Error('USER_NOT_FOUND')
+  if (user.stripeCustomerId) return user.stripeCustomerId
+
+  const customer = await stripe.customers.create({
+    email: user.email,
+    name: user.displayName,
+    metadata: { userId },
+  })
+
+  await prisma.user.update({ where: { id: userId }, data: { stripeCustomerId: customer.id } })
+  return customer.id
+}
+
+// ─── Saved payment methods ────────────────────────────────────────────────────
+
+export async function createSetupIntent(userId: string) {
+  const customerId = await ensureStripeCustomer(userId)
+  const setupIntent = await stripe.setupIntents.create({
+    customer: customerId,
+    payment_method_types: ['card'],
+  })
+  return { clientSecret: setupIntent.client_secret!, customerId }
+}
+
+export async function listSavedPaymentMethods(userId: string) {
+  const user = await prisma.user.findUnique({ where: { id: userId } })
+  if (!user?.stripeCustomerId) return { paymentMethods: [], defaultPaymentMethodId: null }
+
+  const [methods, customer] = await Promise.all([
+    stripe.paymentMethods.list({ customer: user.stripeCustomerId, type: 'card' }),
+    stripe.customers.retrieve(user.stripeCustomerId),
+  ])
+
+  const defaultPaymentMethodId =
+    !customer.deleted && typeof customer.invoice_settings?.default_payment_method === 'string'
+      ? customer.invoice_settings.default_payment_method
+      : null
+
+  return {
+    paymentMethods: methods.data.map((pm) => ({
+      id: pm.id,
+      brand: pm.card?.brand ?? 'unknown',
+      last4: pm.card?.last4 ?? '****',
+      expMonth: pm.card?.exp_month ?? 0,
+      expYear: pm.card?.exp_year ?? 0,
+      isDefault: pm.id === defaultPaymentMethodId,
+    })),
+    defaultPaymentMethodId,
+  }
+}
+
+async function assertOwnsPaymentMethod(userId: string, paymentMethodId: string): Promise<string> {
+  const user = await prisma.user.findUnique({ where: { id: userId } })
+  if (!user?.stripeCustomerId) throw new Error('NO_STRIPE_CUSTOMER')
+
+  const pm = await stripe.paymentMethods.retrieve(paymentMethodId)
+  if (pm.customer !== user.stripeCustomerId) throw new Error('FORBIDDEN')
+  return user.stripeCustomerId
+}
+
+export async function deleteSavedPaymentMethod(userId: string, paymentMethodId: string) {
+  await assertOwnsPaymentMethod(userId, paymentMethodId)
+  await stripe.paymentMethods.detach(paymentMethodId)
+}
+
+export async function setDefaultPaymentMethod(userId: string, paymentMethodId: string) {
+  const customerId = await assertOwnsPaymentMethod(userId, paymentMethodId)
+  await stripe.customers.update(customerId, {
+    invoice_settings: { default_payment_method: paymentMethodId },
+  })
+}
 
 // ─── Payment Intent (escrow hold) ────────────────────────────────────────────
 
@@ -17,18 +95,25 @@ export async function createPaymentIntentForOrder(orderId: string, userId: strin
   if (!order) throw new Error('ORDER_NOT_FOUND')
 
   const amountCents = Math.round(order.grossAmount * 100)
+  const customerId = await ensureStripeCustomer(userId)
 
-  const pi = await stripe.paymentIntents.create({
-    amount: amountCents,
-    currency: 'eur',
-    capture_method: 'manual', // hold funds, capture on release
-    metadata: {
-      orderId,
-      customerId: userId,
-      requestTitle: order.request.title.slice(0, 100),
-    },
-    description: `Ich habe Zeit – ${order.request.title.slice(0, 100)}`,
-  })
+  const [pi, ephemeralKey] = await Promise.all([
+    stripe.paymentIntents.create({
+      amount: amountCents,
+      currency: 'eur',
+      capture_method: 'manual', // hold funds, capture on release
+      customer: customerId,
+      setup_future_usage: 'off_session', // lets the customer save/reuse this card
+      metadata: {
+        orderId,
+        customerId: userId,
+        requestTitle: order.request.title.slice(0, 100),
+      },
+      description: `Ich habe Zeit – ${order.request.title.slice(0, 100)}`,
+    }),
+    // Required by the mobile PaymentSheet SDK to securely list/reuse this customer's saved cards
+    stripe.ephemeralKeys.create({ customer: customerId }, { apiVersion: STRIPE_API_VERSION }),
+  ])
 
   // Store the PI id on the order
   await prisma.order.update({
@@ -36,7 +121,12 @@ export async function createPaymentIntentForOrder(orderId: string, userId: strin
     data: { mangopayPayInId: pi.id },
   })
 
-  return { clientSecret: pi.client_secret!, paymentIntentId: pi.id }
+  return {
+    clientSecret: pi.client_secret!,
+    paymentIntentId: pi.id,
+    customerId,
+    ephemeralKeySecret: ephemeralKey.secret!,
+  }
 }
 
 // ─── Confirm payment after mobile PaymentSheet success ───────────────────────

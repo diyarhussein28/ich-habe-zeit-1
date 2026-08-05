@@ -71,7 +71,11 @@ export async function sendNewDeviceOtpEmail(to: string, code: string) {
 
 // ─── Unified event dispatcher ──────────────────────────────────────────────────
 // Sends push + email (+ optional SMS for high-severity events) for a platform
-// event in one call, respecting the user's NotificationSettings toggles.
+// event in one call, respecting the user's NotificationSettings toggles —
+// both the global pushEnabled/emailEnabled/smsEnabled switches AND the
+// granular per-event ones (newOfferPush, newOfferEmail, chatMessagePush).
+
+export type NotificationCategory = 'newOffer' | 'chatMessage' | 'general'
 
 export interface NotifyEventOptions {
   userId: string
@@ -82,6 +86,31 @@ export interface NotifyEventOptions {
   smsBody?: string
   orderId?: string
   requestId?: string
+  category?: NotificationCategory
+  /** Skip the email channel entirely regardless of emailEnabled (e.g. chat messages, which are push-only). */
+  skipEmail?: boolean
+}
+
+type Settings = {
+  pushEnabled: boolean
+  emailEnabled: boolean
+  smsEnabled: boolean
+  newOfferPush: boolean
+  newOfferEmail: boolean
+  chatMessagePush: boolean
+} | null
+
+function isPushAllowed(category: NotificationCategory | undefined, settings: Settings): boolean {
+  if (settings?.pushEnabled === false) return false
+  if (category === 'newOffer' && settings?.newOfferPush === false) return false
+  if (category === 'chatMessage' && settings?.chatMessagePush === false) return false
+  return true
+}
+
+function isEmailAllowed(category: NotificationCategory | undefined, settings: Settings): boolean {
+  if (settings?.emailEnabled === false) return false
+  if (category === 'newOffer' && settings?.newOfferEmail === false) return false
+  return true
 }
 
 function emailWrapper(title: string, bodyHtml: string): string {
@@ -99,10 +128,10 @@ export async function notifyEvent(opts: NotifyEventOptions): Promise<void> {
   ])
   if (!user) return
 
-  if (settings?.pushEnabled !== false) {
+  if (isPushAllowed(opts.category, settings)) {
     sendPushToUser(opts.userId, { type: opts.pushType, orderId: opts.orderId, requestId: opts.requestId }, opts.title, opts.body).catch(() => {})
   }
-  if (settings?.emailEnabled !== false) {
+  if (!opts.skipEmail && isEmailAllowed(opts.category, settings)) {
     sendEmail(user.email, `${opts.title} — Ich habe Zeit`, emailWrapper(opts.title, opts.emailHtml ?? `<p>${opts.body}</p>`)).catch(() => {})
   }
   if (opts.smsBody && settings?.smsEnabled) {

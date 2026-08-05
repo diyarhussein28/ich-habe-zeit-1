@@ -5,6 +5,10 @@ import {
   createConnectOnboardingLink,
   handleWebhookEvent,
   confirmOrderPayment,
+  createSetupIntent,
+  listSavedPaymentMethods,
+  deleteSavedPaymentMethod,
+  setDefaultPaymentMethod,
 } from '../services/stripe.service.js'
 import { openDisputeFromChargeback } from '../services/dispute.service.js'
 import { prisma } from '../config/prisma.js'
@@ -92,6 +96,49 @@ export async function stripeRoutes(app: FastifyInstance) {
       connected: !!provider?.stripeConnectAccountId,
       enabled: provider?.stripeConnectEnabled ?? false,
     })
+  })
+
+  // ── Saved payment methods (customer profile) ────────────────────────────────
+
+  // POST /api/stripe/payment-methods/setup-intent — begin adding a new card
+  app.post('/payment-methods/setup-intent', { preHandler: requireAuth }, async (request, reply) => {
+    if (request.userRole === 'ADMIN') return reply.status(403).send({ error: 'NOT_APPLICABLE' })
+    try {
+      const result = await createSetupIntent(request.userId)
+      return reply.send(result)
+    } catch (err: unknown) {
+      return reply.status(400).send({ error: err instanceof Error ? err.message : 'ERROR' })
+    }
+  })
+
+  // GET /api/stripe/payment-methods — list saved cards
+  app.get('/payment-methods', { preHandler: requireAuth }, async (request, reply) => {
+    const result = await listSavedPaymentMethods(request.userId)
+    return reply.send(result)
+  })
+
+  // DELETE /api/stripe/payment-methods/:id — remove a saved card
+  app.delete('/payment-methods/:id', { preHandler: requireAuth }, async (request, reply) => {
+    const { id } = request.params as { id: string }
+    try {
+      await deleteSavedPaymentMethod(request.userId, id)
+      return reply.send({ message: 'Zahlungsmethode entfernt.' })
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'ERROR'
+      return reply.status(msg === 'FORBIDDEN' ? 403 : 400).send({ error: msg })
+    }
+  })
+
+  // PATCH /api/stripe/payment-methods/:id/default — set as default
+  app.patch('/payment-methods/:id/default', { preHandler: requireAuth }, async (request, reply) => {
+    const { id } = request.params as { id: string }
+    try {
+      await setDefaultPaymentMethod(request.userId, id)
+      return reply.send({ message: 'Standard-Zahlungsmethode aktualisiert.' })
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'ERROR'
+      return reply.status(msg === 'FORBIDDEN' ? 403 : 400).send({ error: msg })
+    }
   })
 
   // ── Webhook ───────────────────────────────────────────────────────────────

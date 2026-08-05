@@ -222,6 +222,7 @@ export async function requestRoutes(app: FastifyInstance) {
           requestId: id,
           title: 'Neues Angebot erhalten',
           body: `Ein Anbieter hat ein Angebot für "${req.title}" abgegeben.`,
+          category: 'newOffer',
         }).catch(() => {})
       }
 

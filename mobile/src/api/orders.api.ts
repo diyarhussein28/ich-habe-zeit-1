@@ -9,7 +9,7 @@ export const ordersApi = {
     apiClient.get<Order>(`/api/orders/${id}`),
 
   initPayment: (id: string) =>
-    apiClient.post<{ clientSecret: string; paymentIntentId: string }>(`/api/orders/${id}/pay`),
+    apiClient.post<{ clientSecret: string; paymentIntentId: string; customerId: string; ephemeralKeySecret: string }>(`/api/orders/${id}/pay`),
 
   confirmPayment: (id: string, paymentIntentId: string) =>
     apiClient.post<{ order: Order }>(`/api/orders/${id}/pay/confirm`, { paymentIntentId }),

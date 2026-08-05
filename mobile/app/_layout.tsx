@@ -43,6 +43,8 @@ function RootLayoutInner() {
       <Stack.Screen name="support" />
       <Stack.Screen name="addresses" />
       <Stack.Screen name="notification-settings" />
+      <Stack.Screen name="accessibility-settings" />
+      <Stack.Screen name="payment-methods" />
       <Stack.Screen name="reset-password" />
       <Stack.Screen name="+not-found" />
     </Stack>

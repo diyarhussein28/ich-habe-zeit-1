@@ -2,7 +2,7 @@ import type { FastifyInstance } from 'fastify'
 import type { WebSocket } from '@fastify/websocket'
 import { prisma } from '../config/prisma.js'
 import { sendMessage, getMessages } from '../services/chat.service.js'
-import { sendPushToUser } from '../services/push.service.js'
+import { notifyEvent } from '../services/notification.service.js'
 
 // orderId → live connections
 const rooms = new Map<string, Set<WebSocket>>()
@@ -97,12 +97,15 @@ export async function chatGateway(app: FastifyInstance) {
             const roomClients = rooms.get(orderId)
             const recipientOnline = roomClients && roomClients.size > 1
             if (!recipientOnline) {
-              sendPushToUser(
-                recipientId,
-                { type: 'NEW_MESSAGE', orderId, messageId: saved.id },
-                'Neue Nachricht',
-                msg.content.trim().slice(0, 100),
-              ).catch(() => {})
+              notifyEvent({
+                userId: recipientId,
+                pushType: 'NEW_MESSAGE',
+                orderId,
+                title: 'Neue Nachricht',
+                body: msg.content.trim().slice(0, 100),
+                category: 'chatMessage',
+                skipEmail: true,
+              }).catch(() => {})
             }
           }
         }

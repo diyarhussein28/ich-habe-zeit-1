@@ -1,6 +1,7 @@
-import React from 'react'
+import React, { useMemo } from 'react'
 import { View, StyleSheet, StyleProp, ViewStyle } from 'react-native'
-import { colors, radius, spacing, shadow } from '../../constants/theme'
+import { radius, spacing, shadow, getAccessibleColors } from '../../constants/theme'
+import { useAccessibilityStore } from '../../store/accessibility.store'
 
 interface CardProps {
   children: React.ReactNode
@@ -9,6 +10,9 @@ interface CardProps {
 }
 
 export function Card({ children, style, elevated = false }: CardProps) {
+  const { highContrast } = useAccessibilityStore()
+  const styles = useMemo(() => makeStyles(getAccessibleColors(highContrast)), [highContrast])
+
   return (
     <View style={[styles.card, elevated ? shadow.md : shadow.sm, style]}>
       {children}
@@ -16,12 +20,14 @@ export function Card({ children, style, elevated = false }: CardProps) {
   )
 }
 
-const styles = StyleSheet.create({
-  card: {
-    backgroundColor: colors.surface,
-    borderRadius: radius.lg,
-    padding: spacing.md,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-})
+function makeStyles(colors: ReturnType<typeof getAccessibleColors>) {
+  return StyleSheet.create({
+    card: {
+      backgroundColor: colors.surface,
+      borderRadius: radius.lg,
+      padding: spacing.md,
+      borderWidth: 1,
+      borderColor: colors.border,
+    },
+  })
+}

@@ -93,9 +93,11 @@ export default function CustomerOrderDetailScreen() {
         // Native: use Stripe PaymentSheet (useStripe called at top level of the
         // component; Metro aliases the whole module to a safe no-op on web)
         const { data } = await ordersApi.initPayment(id)
-        const { clientSecret, paymentIntentId } = data
+        const { clientSecret, paymentIntentId, customerId, ephemeralKeySecret } = data
         const { error: initError } = await initPaymentSheet({
           paymentIntentClientSecret: clientSecret,
+          customerId,
+          customerEphemeralKeySecret: ephemeralKeySecret,
           merchantDisplayName: 'Ich habe Zeit',
           style: 'automatic',
         })

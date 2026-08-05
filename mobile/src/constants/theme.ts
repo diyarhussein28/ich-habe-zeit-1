@@ -58,6 +58,31 @@ export const fontWeight = {
   bold: '700' as const,
 }
 
+// High-contrast palette override, used by getAccessibleColors() when the
+// user has enabled "Hoher Kontrast" in Barrierefreiheit settings.
+const highContrastOverrides: Partial<typeof colors> = {
+  text: '#000000',
+  textSecondary: '#1A1A1A',
+  textDisabled: '#4A4A4A',
+  border: '#000000',
+  borderFocus: '#000000',
+  background: '#FFFFFF',
+  surface: '#FFFFFF',
+  primary: '#0B3D91',
+  primaryDark: '#062A66',
+  primaryLight: '#D6E4FF',
+}
+
+export function getAccessibleColors(highContrast: boolean): typeof colors {
+  return highContrast ? { ...colors, ...highContrastOverrides } : colors
+}
+
+export const LARGE_TEXT_SCALE = 1.2
+
+export function scaleFont(base: number, largeText: boolean): number {
+  return largeText ? Math.round(base * LARGE_TEXT_SCALE) : base
+}
+
 export const shadow = {
   sm: {
     shadowColor: '#000',

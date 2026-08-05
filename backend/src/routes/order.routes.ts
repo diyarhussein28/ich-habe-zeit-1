@@ -5,6 +5,7 @@ import * as chatService from '../services/chat.service.js'
 import * as disputeService from '../services/dispute.service.js'
 import { requireAuth, requireVerified, requireRole } from '../middleware/auth.middleware.js'
 import { notifyEvent } from '../services/notification.service.js'
+import { flagUnusualRatingPattern } from '../services/moderation.service.js'
 import { prisma } from '../config/prisma.js'
 import {
   createPaymentIntentForOrder,
@@ -402,6 +403,12 @@ export async function orderRoutes(app: FastifyInstance) {
             comment: body.data.comment,
           },
         })
+        flagUnusualRatingPattern({
+          raterUserId: request.userId,
+          side: 'customer',
+          raterProfileId: customerProfile.id,
+          receiverProfileId: order.offer.providerId,
+        }).catch(() => {})
       } else {
         const providerProfile = await prisma.providerProfile.findUnique({ where: { userId: request.userId } })
         if (!providerProfile) return reply.status(400).send({ error: 'NO_PROVIDER_PROFILE' })
@@ -423,6 +430,12 @@ export async function orderRoutes(app: FastifyInstance) {
             comment: body.data.comment,
           },
         })
+        flagUnusualRatingPattern({
+          raterUserId: request.userId,
+          side: 'provider',
+          raterProfileId: providerProfile.id,
+          receiverProfileId: customerProfile.id,
+        }).catch(() => {})
       }
       return reply.send({ rating })
     } catch (err: unknown) {
