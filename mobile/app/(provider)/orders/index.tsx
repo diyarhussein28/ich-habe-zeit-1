@@ -16,6 +16,7 @@ import { Badge } from '../../../src/components/ui/Badge'
 import { Button } from '../../../src/components/ui/Button'
 import { getApiErrorMessage } from '../../../src/api/client'
 import { colors, spacing, fontSize, fontWeight } from '../../../src/constants/theme'
+import { formatEur } from '../../../src/utils/currency'
 import type { Order } from '../../../src/api/types'
 
 const STATUS_LABEL: Record<string, string> = {
@@ -139,7 +140,7 @@ function OrderCard({
         <View style={styles.amounts}>
           <Text style={styles.amountLabel}>Auszahlung</Text>
           <Text style={styles.amountValue}>
-            {(order.netProviderAmount ?? order.providerAmount ?? 0).toFixed(2)} €
+            {formatEur(order.netProviderAmount ?? order.providerAmount ?? 0)}
           </Text>
         </View>
         <View style={styles.cardActions}>

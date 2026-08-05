@@ -1,7 +1,9 @@
 import bcrypt from 'bcryptjs'
+import { randomBytes } from 'crypto'
 import { prisma } from '../config/prisma.js'
 import { createOtp, verifyOtp, incrementOtpAttempts } from './otp.service.js'
-import { sendOtpEmail, sendOtpSms } from './notification.service.js'
+import { sendOtpEmail, sendOtpSms, sendPasswordResetEmail, sendNewDeviceOtpEmail } from './notification.service.js'
+import { checkDuplicateRegistration, recordConsent } from './moderation.service.js'
 import {
   generateTotpSecret,
   generateTotpUri,
@@ -17,12 +19,22 @@ export async function registerUser(data: {
   password: string
   displayName: string
   role: UserRole
+  registrationIp?: string
+  registrationDeviceId?: string
+  consentVersion?: string
 }) {
   const existingEmail = await prisma.user.findUnique({ where: { email: data.email } })
   if (existingEmail) throw new Error('EMAIL_TAKEN')
 
   const existingPhone = await prisma.user.findUnique({ where: { phone: data.phone } })
   if (existingPhone) throw new Error('PHONE_TAKEN')
+
+  await checkDuplicateRegistration({
+    email: data.email,
+    phone: data.phone,
+    deviceId: data.registrationDeviceId,
+    ip: data.registrationIp,
+  })
 
   const passwordHash = await bcrypt.hash(data.password, 12)
 
@@ -33,6 +45,8 @@ export async function registerUser(data: {
       passwordHash,
       role: data.role,
       displayName: data.displayName,
+      registrationIp: data.registrationIp,
+      registrationDeviceId: data.registrationDeviceId,
       notificationSettings: { create: {} },
     },
   })
@@ -41,6 +55,12 @@ export async function registerUser(data: {
     await prisma.customerProfile.create({ data: { userId: user.id } })
   } else if (data.role === 'PROVIDER') {
     await prisma.providerProfile.create({ data: { userId: user.id } })
+  }
+
+  // GDPR Art. 7 — record consent to AGB + privacy policy given at registration
+  if (data.registrationIp) {
+    await recordConsent(user.id, 'agb', data.consentVersion ?? '1.0', data.registrationIp)
+    await recordConsent(user.id, 'privacy_policy', data.consentVersion ?? '1.0', data.registrationIp)
   }
 
   // Send OTP for email + phone
@@ -128,48 +148,96 @@ export async function resendOtp(userId: string, type: 'email' | 'phone') {
   }
 }
 
+const PASSWORD_RESET_EXPIRES_MS = 60 * 60 * 1000 // 1 hour, single-use
+
 export async function initiatePasswordReset(email: string) {
   const user = await prisma.user.findUnique({ where: { email } })
   if (!user) return // Don't reveal if email exists
 
-  const otp = await createOtp(user.id, 'email')
-  // In production, send a reset link with the OTP embedded
-  await sendOtpEmail(
-    user.email,
-    `Passwort zurücksetzen — Ihr Code: ${otp.code} (gültig 10 Minuten)`
-  )
+  // Invalidate any earlier unused reset tokens for this user
+  await prisma.passwordResetToken.updateMany({
+    where: { userId: user.id, usedAt: null },
+    data: { usedAt: new Date() },
+  })
+
+  const token = randomBytes(32).toString('hex')
+  await prisma.passwordResetToken.create({
+    data: { userId: user.id, token, expiresAt: new Date(Date.now() + PASSWORD_RESET_EXPIRES_MS) },
+  })
+
+  const resetUrl = `ichhabezeit://reset-password?token=${token}`
+  await sendPasswordResetEmail(user.email, resetUrl)
 }
 
-export async function resetPassword(userId: string, code: string, newPassword: string) {
-  const result = await verifyOtp(userId, 'email', code)
-  if (!result.valid) throw new Error(result.reason ?? 'OTP_INVALID')
+export async function resetPasswordWithToken(token: string, newPassword: string) {
+  const resetToken = await prisma.passwordResetToken.findUnique({ where: { token } })
+  if (!resetToken || resetToken.usedAt || resetToken.expiresAt < new Date()) {
+    throw new Error('INVALID_OR_EXPIRED_TOKEN')
+  }
 
   const passwordHash = await bcrypt.hash(newPassword, 12)
-  await prisma.user.update({ where: { id: userId }, data: { passwordHash } })
 
-  // Revoke all active sessions
-  await prisma.session.updateMany({
-    where: { userId, revokedAt: null },
-    data: { revokedAt: new Date() },
-  })
+  await prisma.$transaction([
+    prisma.user.update({ where: { id: resetToken.userId }, data: { passwordHash } }),
+    prisma.passwordResetToken.update({ where: { id: resetToken.id }, data: { usedAt: new Date() } }),
+    prisma.session.updateMany({
+      where: { userId: resetToken.userId, revokedAt: null },
+      data: { revokedAt: new Date() },
+    }),
+  ])
 }
 
-export async function createSession(
-  userId: string,
-  token: string,
-  deviceInfo?: string,
-  ipAddress?: string,
+export interface CreateSessionOptions {
+  deviceInfo?: string
+  ipAddress?: string
   expiresAt?: Date
-) {
+  deviceId?: string
+  isTrusted?: boolean
+  trustedUntil?: Date
+}
+
+export async function createSession(userId: string, token: string, opts: CreateSessionOptions = {}) {
   return prisma.session.create({
     data: {
       userId,
       token,
-      deviceInfo,
-      ipAddress,
-      expiresAt: expiresAt ?? new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+      deviceInfo: opts.deviceInfo,
+      ipAddress: opts.ipAddress,
+      deviceId: opts.deviceId,
+      isTrusted: opts.isTrusted ?? false,
+      trustedUntil: opts.trustedUntil,
+      expiresAt: opts.expiresAt ?? new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
     },
   })
+}
+
+// ─── New-device detection & trust ─────────────────────────────────────────────
+
+const DEVICE_TRUST_DAYS = 30
+
+export async function isKnownDevice(userId: string, deviceId: string): Promise<boolean> {
+  const existing = await prisma.session.findFirst({ where: { userId, deviceId } })
+  return !!existing
+}
+
+export async function isTrustedDevice(userId: string, deviceId: string): Promise<boolean> {
+  const trusted = await prisma.session.findFirst({
+    where: { userId, deviceId, isTrusted: true, trustedUntil: { gt: new Date() } },
+  })
+  return !!trusted
+}
+
+export async function sendDeviceChallengeOtp(userId: string, email: string) {
+  const otp = await createOtp(userId, 'email')
+  await sendNewDeviceOtpEmail(email, otp.code)
+}
+
+export async function verifyDeviceChallengeOtp(userId: string, code: string) {
+  const result = await verifyOtp(userId, 'email', code)
+  if (!result.valid) {
+    await incrementOtpAttempts(userId, 'email', code)
+    throw new Error(result.reason ?? 'INVALID_CODE')
+  }
 }
 
 export async function revokeAllSessions(userId: string) {

@@ -24,13 +24,26 @@ export async function createOffer(input: CreateOfferInput) {
 
   if (provider.user.verificationStatus === 'SUSPENDED') throw new Error('ACCOUNT_SUSPENDED')
 
-  const request = await prisma.serviceRequest.findUnique({ where: { id: input.requestId } })
+  const request = await prisma.serviceRequest.findUnique({
+    where: { id: input.requestId },
+    include: { category: true },
+  })
   if (!request) throw new Error('REQUEST_NOT_FOUND')
   if (!['OPEN', 'OFFER_RECEIVED'].includes(request.status)) {
     throw new Error('REQUEST_NOT_OPEN')
   }
   if (request.expiresAt && request.expiresAt < new Date()) {
     throw new Error('REQUEST_EXPIRED')
+  }
+
+  // Category-specific verification requirement (e.g. electrical licence)
+  if (request.category.requiredVerificationDocTypes.length > 0) {
+    const providerCategory = await prisma.providerCategory.findUnique({
+      where: { providerProfileId_categoryId: { providerProfileId: provider.id, categoryId: request.categoryId } },
+    })
+    if (!providerCategory?.isVerified) {
+      throw new Error('CATEGORY_VERIFICATION_REQUIRED')
+    }
   }
 
   // Provider can't offer on their own request (shouldn't happen but guard it)

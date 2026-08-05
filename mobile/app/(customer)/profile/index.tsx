@@ -7,7 +7,6 @@ import {
   ScrollView,
   TextInput,
   ActivityIndicator,
-  Switch,
 } from 'react-native'
 import { useRouter } from 'expo-router'
 import { SafeAreaView } from 'react-native-safe-area-context'
@@ -20,8 +19,22 @@ import { Badge } from '../../../src/components/ui/Badge'
 import { Button } from '../../../src/components/ui/Button'
 import { getApiErrorMessage } from '../../../src/api/client'
 import { colors, spacing, fontSize, fontWeight, radius } from '../../../src/constants/theme'
+import { formatDate } from '../../../src/utils/date'
 import { LegalDocsAccordion } from '../../../src/components/LegalDocsAccordion'
 import { AccountDataActions } from '../../../src/components/AccountDataActions'
+
+// Converts "DD.MM.YYYY" to an ISO date string. Returns undefined for an empty
+// input (no change) or null for an unparsable one (caller should show an error).
+function parseGermanDate(input: string): string | undefined | null {
+  const trimmed = input.trim()
+  if (!trimmed) return undefined
+  const match = trimmed.match(/^(\d{2})\.(\d{2})\.(\d{4})$/)
+  if (!match) return null
+  const [, day, month, year] = match
+  const date = new Date(Number(year), Number(month) - 1, Number(day))
+  if (Number.isNaN(date.getTime())) return null
+  return date.toISOString()
+}
 
 const KYC_LABEL: Record<string, string> = {
   REGISTERED: 'Nicht verifiziert',
@@ -41,10 +54,8 @@ export default function CustomerProfileScreen() {
 
   const [editing, setEditing] = useState(false)
   const [displayName, setDisplayName] = useState('')
+  const [dateOfBirth, setDateOfBirth] = useState('')
   const [saveError, setSaveError] = useState<string | null>(null)
-  const [showNotifications, setShowNotifications] = useState(false)
-  const [pushEnabled, setPushEnabled] = useState(true)
-  const [emailEnabled, setEmailEnabled] = useState(true)
   const [showAgb, setShowAgb] = useState(false)
   const [showAccountData, setShowAccountData] = useState(false)
 
@@ -57,7 +68,13 @@ export default function CustomerProfileScreen() {
   const profile = data ?? user
 
   const saveMutation = useMutation({
-    mutationFn: () => profileApi.update({ displayName: displayName.trim() }),
+    mutationFn: () => {
+      const iso = parseGermanDate(dateOfBirth)
+      return profileApi.update({
+        displayName: displayName.trim(),
+        ...(iso ? { dateOfBirth: iso } : {}),
+      })
+    },
     onSuccess: (res) => {
       updateUser({ displayName: res.data.profile.displayName })
       qc.invalidateQueries({ queryKey: ['my-profile'] })
@@ -75,6 +92,7 @@ export default function CustomerProfileScreen() {
 
   const startEdit = () => {
     setDisplayName(profile?.displayName ?? '')
+    setDateOfBirth(profile?.dateOfBirth ? formatDate(profile.dateOfBirth) : '')
     setSaveError(null)
     setEditing(true)
   }
@@ -133,6 +151,16 @@ export default function CustomerProfileScreen() {
               autoFocus
             />
 
+            <Text style={styles.fieldLabel}>Geburtsdatum (optional)</Text>
+            <TextInput
+              style={styles.textInput}
+              value={dateOfBirth}
+              onChangeText={setDateOfBirth}
+              placeholder="TT.MM.JJJJ"
+              placeholderTextColor={colors.textDisabled}
+              keyboardType="number-pad"
+            />
+
             {saveError ? (
               <Text style={styles.errorText}>{saveError}</Text>
             ) : null}
@@ -155,6 +183,10 @@ export default function CustomerProfileScreen() {
                     setSaveError('Name darf nicht leer sein.')
                     return
                   }
+                  if (parseGermanDate(dateOfBirth) === null) {
+                    setSaveError('Bitte gib das Geburtsdatum im Format TT.MM.JJJJ ein.')
+                    return
+                  }
                   saveMutation.mutate()
                 }}
               />
@@ -168,6 +200,8 @@ export default function CustomerProfileScreen() {
           <Divider />
           <Row label="Telefon" value={(profile as { phone?: string }).phone ?? '—'} />
           <Divider />
+          <Row label="Geburtsdatum" value={profile.dateOfBirth ? formatDate(profile.dateOfBirth) : '—'} />
+          <Divider />
           <Row label="Rolle" value="Auftraggeber" />
         </Card>
 
@@ -175,19 +209,11 @@ export default function CustomerProfileScreen() {
         <Card style={styles.menuCard}>
           <MenuItem emoji="🔒" label="Passwort ändern" onPress={() => router.push('/(auth)/forgot-password')} />
           <Divider />
-          <MenuItem emoji="🔔" label="Benachrichtigungen" onPress={() => setShowNotifications((v) => !v)} />
-          {showNotifications && (
-            <View style={styles.notifPanel}>
-              <View style={styles.notifRow}>
-                <Text style={styles.notifLabel}>Push-Benachrichtigungen</Text>
-                <Switch value={pushEnabled} onValueChange={setPushEnabled} trackColor={{ true: colors.primary }} />
-              </View>
-              <View style={styles.notifRow}>
-                <Text style={styles.notifLabel}>E-Mail-Benachrichtigungen</Text>
-                <Switch value={emailEnabled} onValueChange={setEmailEnabled} trackColor={{ true: colors.primary }} />
-              </View>
-            </View>
-          )}
+          <MenuItem emoji="📍" label="Meine Adressen" onPress={() => router.push('/addresses')} />
+          <Divider />
+          <MenuItem emoji="📄" label="Rechnungen" onPress={() => router.push('/(customer)/profile/invoices')} />
+          <Divider />
+          <MenuItem emoji="🔔" label="Benachrichtigungen" onPress={() => router.push('/notification-settings')} />
           <Divider />
           <MenuItem emoji="📄" label="Rechtliches" onPress={() => setShowAgb((v) => !v)} />
           {showAgb && <LegalDocsAccordion />}
@@ -283,9 +309,6 @@ const styles = StyleSheet.create({
   errorText: { fontSize: fontSize.sm, color: colors.error, backgroundColor: '#fee2e2', padding: spacing.sm, borderRadius: 6, marginBottom: spacing.sm },
   infoCard: { marginBottom: spacing.md },
   menuCard: { marginBottom: spacing.lg },
-  notifPanel: { backgroundColor: colors.background, borderRadius: radius.md, padding: spacing.md, marginVertical: spacing.xs, gap: spacing.sm },
-  notifRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  notifLabel: { fontSize: fontSize.sm, color: colors.text },
   logoutBtn: { marginBottom: spacing.lg },
   version: { fontSize: fontSize.xs, color: colors.textDisabled, textAlign: 'center', marginBottom: spacing.xl },
 })

@@ -16,6 +16,7 @@ import { Card } from '../../../src/components/ui/Card'
 import { Badge } from '../../../src/components/ui/Badge'
 import { Button } from '../../../src/components/ui/Button'
 import { colors, spacing, fontSize, fontWeight } from '../../../src/constants/theme'
+import { formatEur } from '../../../src/utils/currency'
 import type { ServiceRequest } from '../../../src/api/types'
 
 const STATUS_LABEL: Record<string, string> = {
@@ -105,7 +106,7 @@ function RequestCard({ request, onPress }: { request: ServiceRequest; onPress: (
         <Text style={styles.cardDesc} numberOfLines={2}>{request.description}</Text>
         <View style={styles.cardMeta}>
           <Text style={styles.metaItem}>📍 {request.addressCity ?? request.city ?? ''} {request.plz}</Text>
-          {(request.budgetMin ?? request.budget) ? <Text style={styles.metaItem}>💶 {(request.budgetMin ?? request.budget)!.toFixed(2)} €</Text> : null}
+          {(request.budgetMin ?? request.budget) ? <Text style={styles.metaItem}>💶 {formatEur((request.budgetMin ?? request.budget)!)}</Text> : null}
           {offerCount > 0 ? (
             <Text style={[styles.metaItem, styles.offerBadge]}>
               {offerCount} Angebot{offerCount !== 1 ? 'e' : ''}

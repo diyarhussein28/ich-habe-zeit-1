@@ -9,7 +9,9 @@ import { requireRole } from '../middleware/auth.middleware.js'
 import { updateKycStatus } from '../services/provider.service.js'
 import { getKycDocuments } from '../services/kyc.service.js'
 import * as supportService from '../services/support.service.js'
-import { sendPushToUser } from '../services/push.service.js'
+import { notifyEvent } from '../services/notification.service.js'
+import * as moderationService from '../services/moderation.service.js'
+import type { BlacklistIdentifierType, BanType } from '@prisma/client'
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -262,6 +264,23 @@ export async function adminRoutes(app: FastifyInstance) {
         id
       )
 
+      const statusMessages: Record<typeof body.data.action, { title: string; body: string }> = {
+        suspend: { title: 'Konto gesperrt', body: 'Ihr Konto wurde durch einen Administrator gesperrt.' },
+        activate: { title: 'Konto wiederhergestellt', body: 'Ihr Konto wurde wieder aktiviert.' },
+        restrict_payout: {
+          title: 'Auszahlungen eingeschränkt',
+          body: 'Ihre Auszahlungen wurden vorübergehend eingeschränkt. Bitte kontaktieren Sie den Support.',
+        },
+      }
+      const msg = statusMessages[body.data.action]
+      notifyEvent({
+        userId: id,
+        pushType: 'ACCOUNT_STATUS',
+        title: msg.title,
+        body: msg.body,
+        smsBody: `Ich habe Zeit: ${msg.title}`,
+      }).catch(() => {})
+
       return reply.send({ user: updated })
     }
   )
@@ -297,7 +316,7 @@ export async function adminRoutes(app: FastifyInstance) {
             ? 'Deine Identität wurde erfolgreich verifiziert.'
             : body.data.notes ?? 'Bitte öffne die App für weitere Informationen.'
 
-        sendPushToUser(id, { type: pushType }, pushTitle, pushBody).catch(() => {})
+        notifyEvent({ userId: id, pushType, title: pushTitle, body: pushBody }).catch(() => {})
 
         return reply.send({ user: updated })
       } catch (err: unknown) {
@@ -508,9 +527,45 @@ export async function adminRoutes(app: FastifyInstance) {
             ? 'Deine Identität wurde erfolgreich verifiziert.'
             : body.data.note ?? 'Bitte öffne die App für weitere Informationen.'
 
-        sendPushToUser(userId, { type: pushType }, pushTitle, pushBody).catch(() => {})
+        notifyEvent({ userId, pushType, title: pushTitle, body: pushBody }).catch(() => {})
 
         return reply.send({ user: updated })
+      } catch (err: unknown) {
+        return reply.status(404).send({ error: errMsg(err) })
+      }
+    }
+  )
+
+  // GET /admin/providers/pending-category-verification — queue of docs awaiting review
+  app.get(
+    '/providers/pending-category-verification',
+    { preHandler: requireRole('ADMIN') },
+    async (request, reply) => {
+      const rows = await prisma.providerCategory.findMany({
+        where: { isVerified: false, verificationDocUrls: { isEmpty: false } },
+        include: {
+          category: { select: { id: true, name: true } },
+          providerProfile: { include: { user: { select: { id: true, displayName: true, email: true } } } },
+        },
+        orderBy: { createdAt: 'asc' },
+      })
+      return reply.send({ items: rows })
+    }
+  )
+
+  // PATCH /admin/providers/:userId/categories/:categoryId/verify
+  app.patch(
+    '/providers/:userId/categories/:categoryId/verify',
+    { preHandler: requireRole('ADMIN') },
+    async (request, reply) => {
+      const { userId, categoryId } = request.params as { userId: string; categoryId: string }
+      const body = z.object({ isVerified: z.boolean() }).safeParse(request.body)
+      if (!body.success) return reply.status(400).send({ error: 'VALIDATION_ERROR' })
+
+      try {
+        const { reviewCategoryVerification } = await import('../services/provider.service.js')
+        const updated = await reviewCategoryVerification(userId, categoryId, body.data.isVerified, request.userId)
+        return reply.send({ providerCategory: updated })
       } catch (err: unknown) {
         return reply.status(404).send({ error: errMsg(err) })
       }
@@ -917,6 +972,27 @@ export async function adminRoutes(app: FastifyInstance) {
 
   // ── Categories ────────────────────────────────────────────────────────────
 
+  const categoryCustomFieldSchema = z.object({
+    key: z.string().min(1).max(50),
+    label: z.string().min(1).max(100),
+    type: z.enum(['text', 'number', 'select', 'boolean']),
+    required: z.boolean().optional(),
+    options: z.array(z.string()).optional(),
+  })
+
+  const categoryWriteSchema = z.object({
+    name: z.string().min(1),
+    description: z.string().optional(),
+    icon: z.string().optional(),
+    parentId: z.string().uuid().optional(),
+    commissionRate: z.number().min(0).max(1).optional(),
+    geoRestrictions: z.array(z.string()).optional(),
+    customFields: z.array(categoryCustomFieldSchema).optional(),
+    requiredVerificationDocTypes: z.array(z.string()).optional(),
+    reducedVatEligible: z.boolean().optional(),
+    sortOrder: z.number().int().optional(),
+  })
+
   // GET /admin/categories
   app.get('/categories', { preHandler: requireRole('ADMIN') }, async (request, reply) => {
     const categories = await prisma.category.findMany({
@@ -928,14 +1004,7 @@ export async function adminRoutes(app: FastifyInstance) {
 
   // POST /admin/categories
   app.post('/categories', { preHandler: requireRole('ADMIN') }, async (request, reply) => {
-    const body = z
-      .object({
-        name: z.string().min(1),
-        description: z.string().optional(),
-        icon: z.string().optional(),
-        parentId: z.string().uuid().optional(),
-      })
-      .safeParse(request.body)
+    const body = categoryWriteSchema.safeParse(request.body)
     if (!body.success) {
       return reply.status(400).send({ error: 'VALIDATION_ERROR', details: body.error.flatten() })
     }
@@ -952,22 +1021,27 @@ export async function adminRoutes(app: FastifyInstance) {
         description: body.data.description,
         icon: body.data.icon,
         parentId: body.data.parentId,
+        commissionRate: body.data.commissionRate,
+        geoRestrictions: body.data.geoRestrictions ?? [],
+        customFields: body.data.customFields as Prisma.InputJsonValue | undefined,
+        requiredVerificationDocTypes: body.data.requiredVerificationDocTypes ?? [],
+        reducedVatEligible: body.data.reducedVatEligible ?? false,
+        sortOrder: body.data.sortOrder ?? 0,
       },
     })
+
+    await writeAuditLog(request.userId, 'CATEGORY_CREATED', 'Category', category.id, {
+      name: category.name,
+      parentId: category.parentId,
+    })
+
     return reply.status(201).send(category)
   })
 
   // PATCH /admin/categories/:id
   app.patch('/categories/:id', { preHandler: requireRole('ADMIN') }, async (request, reply) => {
     const { id } = request.params as { id: string }
-    const body = z
-      .object({
-        name: z.string().min(1).optional(),
-        description: z.string().optional(),
-        icon: z.string().optional(),
-        isActive: z.boolean().optional(),
-      })
-      .safeParse(request.body)
+    const body = categoryWriteSchema.partial().extend({ isActive: z.boolean().optional() }).safeParse(request.body)
     if (!body.success) {
       return reply.status(400).send({ error: 'VALIDATION_ERROR', details: body.error.flatten() })
     }
@@ -979,8 +1053,21 @@ export async function adminRoutes(app: FastifyInstance) {
         ...(body.data.description !== undefined && { description: body.data.description }),
         ...(body.data.icon !== undefined && { icon: body.data.icon }),
         ...(body.data.isActive !== undefined && { isActive: body.data.isActive }),
+        ...(body.data.commissionRate !== undefined && { commissionRate: body.data.commissionRate }),
+        ...(body.data.geoRestrictions !== undefined && { geoRestrictions: body.data.geoRestrictions }),
+        ...(body.data.customFields !== undefined && {
+          customFields: body.data.customFields as Prisma.InputJsonValue,
+        }),
+        ...(body.data.requiredVerificationDocTypes !== undefined && {
+          requiredVerificationDocTypes: body.data.requiredVerificationDocTypes,
+        }),
+        ...(body.data.reducedVatEligible !== undefined && { reducedVatEligible: body.data.reducedVatEligible }),
+        ...(body.data.sortOrder !== undefined && { sortOrder: body.data.sortOrder }),
       },
     })
+
+    await writeAuditLog(request.userId, 'CATEGORY_UPDATED', 'Category', category.id, body.data)
+
     return reply.send(category)
   })
 
@@ -988,6 +1075,7 @@ export async function adminRoutes(app: FastifyInstance) {
   app.delete('/categories/:id', { preHandler: requireRole('ADMIN') }, async (request, reply) => {
     const { id } = request.params as { id: string }
     await prisma.category.update({ where: { id }, data: { isActive: false } })
+    await writeAuditLog(request.userId, 'CATEGORY_DEACTIVATED', 'Category', id)
     return reply.send({ message: 'Category deactivated' })
   })
 
@@ -1209,6 +1297,10 @@ export async function adminRoutes(app: FastifyInstance) {
       data: { content: body.data.content },
     })
 
+    await writeAuditLog(request.userId, 'LEGAL_DOCUMENT_UPDATED', 'LegalDocument', updated.id, {
+      type: updated.type,
+    })
+
     return reply.send({
       id: updated.id,
       type: legalTypeMap[updated.type] ?? updated.type.toUpperCase(),
@@ -1224,6 +1316,7 @@ export async function adminRoutes(app: FastifyInstance) {
     const now = new Date()
     const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000)
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1)
+    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate())
 
     const [
       totalUsers,
@@ -1236,6 +1329,8 @@ export async function adminRoutes(app: FastifyInstance) {
       newUsersThisWeek,
       newOrdersThisWeek,
       revenueThisMonthResult,
+      dailyGmvResult,
+      kycQueueSize,
     ] = await Promise.all([
       prisma.user.count(),
       prisma.user.count({ where: { role: 'PROVIDER' } }),
@@ -1257,6 +1352,11 @@ export async function adminRoutes(app: FastifyInstance) {
         where: { status: 'RELEASED', createdAt: { gte: startOfMonth } },
         _sum: { commissionAmount: true },
       }),
+      prisma.order.aggregate({
+        where: { status: { in: ['RELEASED', 'REFUNDED', 'PARTIALLY_RELEASED'] }, updatedAt: { gte: startOfToday } },
+        _sum: { grossAmount: true },
+      }),
+      prisma.user.count({ where: { verificationStatus: { in: ['KYC_PENDING', 'KYC_RESUBMISSION'] } } }),
     ])
 
     return reply.send({
@@ -1270,7 +1370,317 @@ export async function adminRoutes(app: FastifyInstance) {
       newUsersThisWeek,
       newOrdersThisWeek,
       revenueThisMonth: revenueThisMonthResult._sum?.commissionAmount ?? 0,
+      dailyGmv: dailyGmvResult._sum?.grossAmount ?? 0,
+      kycQueueSize,
     })
+  })
+
+  // GET /admin/reports — category/city performance, dispute & conversion rates
+  app.get('/reports', { preHandler: requireRole('ADMIN') }, async (request, reply) => {
+    const query = z
+      .object({
+        from: z.coerce.date().optional(),
+        to: z.coerce.date().optional(),
+      })
+      .safeParse(request.query)
+    if (!query.success) return reply.status(400).send({ error: 'VALIDATION_ERROR' })
+
+    const from = query.data.from ?? new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)
+    const to = query.data.to ?? new Date()
+    const completedStatuses: OrderStatus[] = ['RELEASED', 'REFUNDED', 'PARTIALLY_RELEASED']
+
+    const [orders, requests, disputes, providers, kycDocs] = await Promise.all([
+      prisma.order.findMany({
+        where: { createdAt: { gte: from, lte: to } },
+        select: {
+          id: true,
+          status: true,
+          grossAmount: true,
+          commissionAmount: true,
+          autoReleased: true,
+          createdAt: true,
+          request: { select: { category: { select: { id: true, name: true } }, addressCity: true, plz: true } },
+        },
+      }),
+      prisma.serviceRequest.count({ where: { createdAt: { gte: from, lte: to } } }),
+      prisma.dispute.count({ where: { createdAt: { gte: from, lte: to } } }),
+      prisma.user.count({ where: { role: 'PROVIDER' } }),
+      prisma.kycDocument.findMany({
+        where: { reviewedAt: { not: null }, createdAt: { gte: from, lte: to } },
+        select: { createdAt: true, reviewedAt: true },
+      }),
+    ])
+
+    const completedOrders = orders.filter((o) => completedStatuses.includes(o.status))
+    const totalGmv = completedOrders.reduce((sum, o) => sum + o.grossAmount, 0)
+    const totalCommission = completedOrders.reduce((sum, o) => sum + o.commissionAmount, 0)
+    const autoReleasedCount = completedOrders.filter((o) => o.autoReleased).length
+
+    const categoryMap = new Map<string, { name: string; gmv: number; orders: number; disputes: number }>()
+    const cityMap = new Map<string, { gmv: number; orders: number }>()
+
+    for (const o of completedOrders) {
+      const cat = o.request.category
+      if (cat) {
+        const entry = categoryMap.get(cat.id) ?? { name: cat.name, gmv: 0, orders: 0, disputes: 0 }
+        entry.gmv += o.grossAmount
+        entry.orders += 1
+        categoryMap.set(cat.id, entry)
+      }
+      const city = o.request.addressCity ?? o.request.plz?.slice(0, 2)
+      if (city) {
+        const entry = cityMap.get(city) ?? { gmv: 0, orders: 0 }
+        entry.gmv += o.grossAmount
+        entry.orders += 1
+        cityMap.set(city, entry)
+      }
+    }
+
+    const activatedProviders = await prisma.user.count({
+      where: { role: 'PROVIDER', verificationStatus: 'KYC_VERIFIED' },
+    })
+
+    const kycQueueTimesMs = kycDocs
+      .filter((d) => d.reviewedAt)
+      .map((d) => d.reviewedAt!.getTime() - d.createdAt.getTime())
+    const avgKycQueueHours =
+      kycQueueTimesMs.length > 0
+        ? kycQueueTimesMs.reduce((a, b) => a + b, 0) / kycQueueTimesMs.length / (1000 * 60 * 60)
+        : 0
+
+    return reply.send({
+      period: { from, to },
+      gmv: totalGmv,
+      platformRevenue: totalCommission,
+      orderVolume: orders.length,
+      completedOrderVolume: completedOrders.length,
+      averageOrderValue: completedOrders.length > 0 ? totalGmv / completedOrders.length : 0,
+      conversionRate: requests > 0 ? completedOrders.length / requests : 0,
+      disputeRate: completedOrders.length > 0 ? disputes / completedOrders.length : 0,
+      autoReleaseRate: completedOrders.length > 0 ? autoReleasedCount / completedOrders.length : 0,
+      providerActivationRate: providers > 0 ? activatedProviders / providers : 0,
+      avgKycQueueHours,
+      categoryPerformance: [...categoryMap.entries()].map(([id, v]) => ({ categoryId: id, ...v })),
+      cityPerformance: [...cityMap.entries()].map(([city, v]) => ({ city, ...v })),
+    })
+  })
+
+  // GET /admin/transactions — real-time payment/payout monitor
+  app.get('/transactions', { preHandler: requireRole('ADMIN') }, async (request, reply) => {
+    const query = z
+      .object({
+        status: z.string().optional(),
+        limit: z.coerce.number().int().min(1).max(100).default(50),
+        offset: z.coerce.number().int().min(0).default(0),
+      })
+      .safeParse(request.query)
+    if (!query.success) return reply.status(400).send({ error: 'VALIDATION_ERROR' })
+
+    const where: Prisma.OrderWhereInput = query.data.status
+      ? { status: query.data.status as OrderStatus }
+      : {}
+
+    const [total, orders] = await Promise.all([
+      prisma.order.count({ where }),
+      prisma.order.findMany({
+        where,
+        select: {
+          id: true,
+          status: true,
+          paymentStatus: true,
+          grossAmount: true,
+          commissionAmount: true,
+          netProviderAmount: true,
+          releasedAmount: true,
+          refundedAmount: true,
+          mangopayPayInId: true,
+          mangopayTransferId: true,
+          mangopayPayOutId: true,
+          createdAt: true,
+          updatedAt: true,
+          customer: { select: { id: true, displayName: true, email: true } },
+          offer: { select: { provider: { select: { user: { select: { id: true, displayName: true } } } } } },
+        },
+        orderBy: { updatedAt: 'desc' },
+        take: query.data.limit,
+        skip: query.data.offset,
+      }),
+    ])
+
+    const fraudSignals = await moderationService.getFraudSignals()
+
+    return reply.send({
+      total,
+      transactions: orders.map((o) => ({
+        id: o.id,
+        status: o.status,
+        paymentStatus: o.paymentStatus,
+        grossAmount: o.grossAmount,
+        commissionAmount: o.commissionAmount,
+        netProviderAmount: o.netProviderAmount,
+        releasedAmount: o.releasedAmount,
+        refundedAmount: o.refundedAmount,
+        stripePaymentIntentId: o.mangopayPayInId,
+        stripeTransferId: o.mangopayTransferId,
+        stripePayoutId: o.mangopayPayOutId,
+        createdAt: o.createdAt,
+        updatedAt: o.updatedAt,
+        customer: o.customer,
+        provider: o.offer.provider.user,
+        isFlaggedForFraud: fraudSignals.repeatedFailedPaymentUserIds.includes(o.customer.id),
+      })),
+      fraudSignals,
+    })
+  })
+
+  // ── Moderation: provider blacklist ──────────────────────────────────────────
+
+  app.get('/moderation/blacklist', { preHandler: requireRole('ADMIN') }, async (request, reply) => {
+    return reply.send({ entries: await moderationService.listBlacklist() })
+  })
+
+  app.post('/moderation/blacklist', { preHandler: requireRole('ADMIN') }, async (request, reply) => {
+    const body = z
+      .object({
+        identifierType: z.enum(['EMAIL', 'PHONE', 'DEVICE_ID', 'DOCUMENT_HASH']),
+        identifierValue: z.string().min(1),
+        reason: z.string().min(3),
+      })
+      .safeParse(request.body)
+    if (!body.success) return reply.status(400).send({ error: 'VALIDATION_ERROR', details: body.error.flatten() })
+
+    try {
+      const entry = await moderationService.addToBlacklist(
+        body.data.identifierType as BlacklistIdentifierType,
+        body.data.identifierValue,
+        body.data.reason,
+        request.userId
+      )
+      await writeAuditLog(request.userId, 'PROVIDER_BLACKLISTED', 'ProviderBlacklist', entry.id, body.data)
+      return reply.status(201).send({ entry })
+    } catch {
+      return reply.status(409).send({ error: 'ALREADY_BLACKLISTED' })
+    }
+  })
+
+  app.delete('/moderation/blacklist/:id', { preHandler: requireRole('ADMIN') }, async (request, reply) => {
+    const { id } = request.params as { id: string }
+    await moderationService.removeFromBlacklist(id)
+    await writeAuditLog(request.userId, 'BLACKLIST_ENTRY_REMOVED', 'ProviderBlacklist', id)
+    return reply.send({ message: 'Removed' })
+  })
+
+  // ── Moderation: IP/device bans ──────────────────────────────────────────────
+
+  app.get('/moderation/bans', { preHandler: requireRole('ADMIN') }, async (request, reply) => {
+    return reply.send({ bans: await moderationService.listBans() })
+  })
+
+  app.post('/moderation/bans', { preHandler: requireRole('ADMIN') }, async (request, reply) => {
+    const body = z
+      .object({
+        type: z.enum(['IP', 'DEVICE']),
+        value: z.string().min(1),
+        reason: z.string().min(3),
+      })
+      .safeParse(request.body)
+    if (!body.success) return reply.status(400).send({ error: 'VALIDATION_ERROR', details: body.error.flatten() })
+
+    try {
+      const ban = await moderationService.addBan(
+        body.data.type as BanType,
+        body.data.value,
+        body.data.reason,
+        request.userId
+      )
+      await writeAuditLog(request.userId, 'ENTITY_BANNED', 'BannedEntity', ban.id, body.data)
+      return reply.status(201).send({ ban })
+    } catch {
+      return reply.status(409).send({ error: 'ALREADY_BANNED' })
+    }
+  })
+
+  app.delete('/moderation/bans/:id', { preHandler: requireRole('ADMIN') }, async (request, reply) => {
+    const { id } = request.params as { id: string }
+    await moderationService.removeBan(id)
+    await writeAuditLog(request.userId, 'BAN_REMOVED', 'BannedEntity', id)
+    return reply.send({ message: 'Removed' })
+  })
+
+  // ── Moderation: content review queue ────────────────────────────────────────
+
+  app.get('/moderation/content', { preHandler: requireRole('ADMIN') }, async (request, reply) => {
+    const query = z.object({ status: z.enum(['PENDING', 'APPROVED', 'REJECTED']).optional() }).safeParse(request.query)
+    if (!query.success) return reply.status(400).send({ error: 'VALIDATION_ERROR' })
+    return reply.send({ items: await moderationService.listModerationQueue(query.data.status) })
+  })
+
+  app.patch('/moderation/content/:id', { preHandler: requireRole('ADMIN') }, async (request, reply) => {
+    const { id } = request.params as { id: string }
+    const body = z
+      .object({ status: z.enum(['APPROVED', 'REJECTED']), reviewNote: z.string().optional() })
+      .safeParse(request.body)
+    if (!body.success) return reply.status(400).send({ error: 'VALIDATION_ERROR', details: body.error.flatten() })
+
+    try {
+      const updated = await moderationService.reviewContent(id, body.data.status, request.userId, body.data.reviewNote)
+      await writeAuditLog(request.userId, `CONTENT_${body.data.status}`, 'FlaggedContent', id)
+      return reply.send({ item: updated })
+    } catch (err: unknown) {
+      return reply.status(404).send({ error: errMsg(err) })
+    }
+  })
+
+  // ── Platform settings (admin-configurable, no deploy required) ─────────────
+
+  const SETTING_KEYS = [
+    'otp_expires_in_minutes',
+    'otp_max_retries',
+    'default_release_window_hours',
+    'kyc_document_types',
+    'feature_flags',
+  ] as const
+
+  app.get('/settings', { preHandler: requireRole('ADMIN') }, async (request, reply) => {
+    const rows = await prisma.platformSetting.findMany()
+    const byKey = new Map(rows.map((r) => [r.key, r.value]))
+
+    const { env } = await import('../config/env.js')
+    const defaults: Record<string, unknown> = {
+      otp_expires_in_minutes: env.OTP_EXPIRES_IN_MINUTES,
+      otp_max_retries: env.OTP_MAX_RETRIES,
+      default_release_window_hours: env.DEFAULT_RELEASE_WINDOW_HOURS,
+      kyc_document_types: ['ID_FRONT', 'ID_BACK', 'SELFIE_WITH_ID'],
+      feature_flags: {},
+    }
+
+    return reply.send({
+      settings: SETTING_KEYS.map((key) => ({
+        key,
+        value: byKey.has(key) ? byKey.get(key) : defaults[key],
+        isOverridden: byKey.has(key),
+      })),
+    })
+  })
+
+  app.patch('/settings/:key', { preHandler: requireRole('ADMIN') }, async (request, reply) => {
+    const { key } = request.params as { key: string }
+    if (!SETTING_KEYS.includes(key as (typeof SETTING_KEYS)[number])) {
+      return reply.status(400).send({ error: 'UNKNOWN_SETTING' })
+    }
+
+    const body = z.object({ value: z.unknown() }).safeParse(request.body)
+    if (!body.success) return reply.status(400).send({ error: 'VALIDATION_ERROR' })
+
+    const setting = await prisma.platformSetting.upsert({
+      where: { key },
+      create: { key, value: body.data.value as Prisma.InputJsonValue, updatedById: request.userId },
+      update: { value: body.data.value as Prisma.InputJsonValue, updatedById: request.userId },
+    })
+
+    await writeAuditLog(request.userId, 'PLATFORM_SETTING_UPDATED', 'PlatformSetting', key, { value: body.data.value })
+
+    return reply.send({ setting })
   })
 
   // ── Audit log ─────────────────────────────────────────────────────────────

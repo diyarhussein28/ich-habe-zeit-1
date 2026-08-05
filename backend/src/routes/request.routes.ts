@@ -3,7 +3,7 @@ import { z } from 'zod'
 import * as requestService from '../services/request.service.js'
 import * as offerService from '../services/offer.service.js'
 import { requireAuth, requireVerified } from '../middleware/auth.middleware.js'
-import { sendPushToUser } from '../services/push.service.js'
+import { notifyEvent } from '../services/notification.service.js'
 import { prisma } from '../config/prisma.js'
 
 const createRequestSchema = z.object({
@@ -55,6 +55,8 @@ export async function requestRoutes(app: FastifyInstance) {
         categoryId: z.string().uuid().optional(),
         status: z.string().optional(),
         plz: z.string().optional(),
+        q: z.string().min(1).max(100).optional(),
+        sort: z.enum(['newest', 'urgency', 'budget_asc', 'budget_desc']).optional(),
         limit: z.coerce.number().max(50).default(20),
         offset: z.coerce.number().default(0),
         feed: z.coerce.boolean().default(false),
@@ -70,6 +72,8 @@ export async function requestRoutes(app: FastifyInstance) {
       categoryId: query.categoryId,
       status: query.status as never,
       plz: query.plz,
+      q: query.q,
+      sort: query.sort,
       customerId: request.userId,
       limit: query.limit,
       offset: query.offset,
@@ -212,12 +216,13 @@ export async function requestRoutes(app: FastifyInstance) {
         include: { customer: { include: { user: true } } },
       })
       if (req?.customer?.userId) {
-        sendPushToUser(
-          req.customer.userId,
-          { type: 'NEW_OFFER', requestId: id },
-          'Neues Angebot erhalten',
-          `Ein Anbieter hat ein Angebot für "${req.title}" abgegeben.`,
-        ).catch(() => {})
+        notifyEvent({
+          userId: req.customer.userId,
+          pushType: 'NEW_OFFER',
+          requestId: id,
+          title: 'Neues Angebot erhalten',
+          body: `Ein Anbieter hat ein Angebot für "${req.title}" abgegeben.`,
+        }).catch(() => {})
       }
 
       return reply.status(201).send({ offer })

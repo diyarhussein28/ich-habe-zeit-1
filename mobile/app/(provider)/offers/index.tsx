@@ -15,6 +15,7 @@ import { Card } from '../../../src/components/ui/Card'
 import { Badge } from '../../../src/components/ui/Badge'
 import { getApiErrorMessage } from '../../../src/api/client'
 import { colors, spacing, fontSize, fontWeight } from '../../../src/constants/theme'
+import { formatEur } from '../../../src/utils/currency'
 import type { Offer } from '../../../src/api/types'
 import { formatDate } from '../../../src/utils/date'
 
@@ -94,7 +95,7 @@ function OfferCard({ offer, onWithdraw }: { offer: Offer; onWithdraw?: () => voi
   return (
     <Card style={styles.card}>
       <View style={styles.cardHeader}>
-        <Text style={styles.price}>{(offer.proposedPrice ?? offer.price ?? 0).toFixed(2)} €</Text>
+        <Text style={styles.price}>{formatEur(offer.proposedPrice ?? offer.price ?? 0)}</Text>
         <Badge label={STATUS_LABEL[offer.status] ?? offer.status} color={STATUS_COLOR[offer.status] ?? 'neutral'} />
       </View>
       <Text style={styles.message} numberOfLines={3}>{offer.scopeOfWork ?? offer.message ?? ''}</Text>

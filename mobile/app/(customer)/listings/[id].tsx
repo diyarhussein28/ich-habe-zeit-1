@@ -14,6 +14,7 @@ import { listingsApi } from '../../../src/api/listings.api'
 import { Button } from '../../../src/components/ui/Button'
 import { getApiErrorMessage } from '../../../src/api/client'
 import { colors, spacing, fontSize, fontWeight, radius } from '../../../src/constants/theme'
+import { formatEur } from '../../../src/utils/currency'
 
 export default function ListingDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>()
@@ -71,7 +72,7 @@ export default function ListingDetailScreen() {
         {/* Title + price */}
         <Text style={styles.title}>{listing.title}</Text>
         <View style={styles.priceRow}>
-          <Text style={styles.price}>{listing.price.toFixed(2)} €</Text>
+          <Text style={styles.price}>{formatEur(listing.price)}</Text>
           <Text style={styles.priceUnit}>
             {listing.pricingModel === 'PER_HOUR' ? ' / Stunde' : ' Festpreis'}
           </Text>

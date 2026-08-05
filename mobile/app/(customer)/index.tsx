@@ -22,6 +22,7 @@ import { useAuthStore } from '../../src/store/auth.store'
 import { colors, spacing, fontSize, fontWeight, radius } from '../../src/constants/theme'
 import type { ServiceCategory, Order } from '../../src/api/types'
 import { formatDate } from '../../src/utils/date'
+import { formatEur } from '../../src/utils/currency'
 
 export default function CustomerHomeScreen() {
   const router = useRouter()
@@ -156,7 +157,7 @@ function RecentOrderCard({
   onView: () => void
 }) {
   const title = (order as unknown as { request?: { title?: string } }).request?.title ?? 'Buchung'
-  const amount = (order.grossAmount ?? order.totalAmount ?? 0).toFixed(2)
+  const amount = formatEur(order.grossAmount ?? order.totalAmount ?? 0)
   const STATUS_LABEL: Record<string, string> = {
     AWAITING_PAYMENT: 'Zahlung ausstehend',
     IN_PROGRESS: 'In Bearbeitung',
@@ -170,7 +171,7 @@ function RecentOrderCard({
       <TouchableOpacity onPress={onView} activeOpacity={0.8}>
         <Text style={styles.recentTitle} numberOfLines={1}>{title}</Text>
         <View style={styles.recentRow}>
-          <Text style={styles.recentAmount}>{amount} €</Text>
+          <Text style={styles.recentAmount}>{amount}</Text>
           <Text style={styles.recentStatus}>{STATUS_LABEL[order.status] ?? order.status}</Text>
         </View>
         <Text style={styles.recentDate}>{formatDate(order.createdAt)}</Text>

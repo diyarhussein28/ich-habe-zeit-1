@@ -27,13 +27,16 @@ export async function generateInvoicesForOrder(orderId: string) {
     where: { id: orderId },
     include: {
       offer: { include: { provider: true } },
-      request: { include: { customer: { include: { user: true } } } },
+      request: { include: { customer: { include: { user: true } }, category: true } },
     },
   })
 
   if (!order) throw new Error('ORDER_NOT_FOUND')
 
-  const releasedStatuses = ['RELEASED', 'REFUNDED', 'PARTIALLY_RELEASED']
+  // A full refund means no consideration was retained on either side — nothing to invoice.
+  if (order.status === 'REFUNDED') return null
+
+  const releasedStatuses = ['RELEASED', 'PARTIALLY_RELEASED']
   if (!releasedStatuses.includes(order.status)) throw new Error('ORDER_NOT_RELEASED')
   if (!order.completedAt) throw new Error('ORDER_NOT_COMPLETED')
 
@@ -45,15 +48,24 @@ export async function generateInvoicesForOrder(orderId: string) {
   const customerUserId = order.customerId
   const serviceDate = order.completedAt
 
+  // On a partial release, only the amount actually retained (gross minus what
+  // was refunded back to the customer) is a billable service — scale both
+  // invoices down proportionally rather than billing the full original gross.
+  const retainedFraction =
+    order.status === 'PARTIALLY_RELEASED' && order.grossAmount > 0
+      ? (order.grossAmount - (order.refundedAmount ?? 0)) / order.grossAmount
+      : 1
+
   // SERVICE_INVOICE — provider → customer
-  const serviceVatRate = provider.isKleinunternehmer ? 0 : 0.19
-  const serviceSubtotal = order.grossAmount
+  // §19 UStG (Kleinunternehmer) → 0%; §12 UStG reduced-rate categories → 7%; else standard 19%
+  const serviceVatRate = provider.isKleinunternehmer ? 0 : order.request.category?.reducedVatEligible ? 0.07 : 0.19
+  const serviceSubtotal = Math.round(order.grossAmount * retainedFraction * 100) / 100
   const serviceVatAmount = Math.round(serviceSubtotal * serviceVatRate * 100) / 100
   const serviceTotalAmount = serviceSubtotal + serviceVatAmount
 
   // COMMISSION_INVOICE — platform → provider
   const commissionVatRate = 0.19
-  const commissionSubtotal = order.commissionAmount
+  const commissionSubtotal = Math.round(order.commissionAmount * retainedFraction * 100) / 100
   const commissionVatAmount = Math.round(commissionSubtotal * commissionVatRate * 100) / 100
   const commissionTotalAmount = commissionSubtotal + commissionVatAmount
 
@@ -111,6 +123,35 @@ export async function getInvoicesForOrder(orderId: string, userId: string) {
     where: { orderId },
     orderBy: { createdAt: 'asc' },
   })
+}
+
+// ─── Kleinunternehmer threshold (§19 UStG — currently EUR 22,000/year) ────────
+
+const KLEINUNTERNEHMER_THRESHOLD = 22000
+
+export async function getKleinunternehmerStatus(providerUserId: string) {
+  const provider = await prisma.providerProfile.findUnique({ where: { userId: providerUserId } })
+  if (!provider) throw new Error('PROFILE_NOT_FOUND')
+
+  const yearStart = new Date(new Date().getFullYear(), 0, 1)
+  const result = await prisma.invoice.aggregate({
+    where: {
+      issuerId: providerUserId,
+      invoiceType: 'SERVICE_INVOICE',
+      issueDate: { gte: yearStart },
+    },
+    _sum: { subtotalAmount: true },
+  })
+
+  const revenue = result._sum.subtotalAmount ?? 0
+
+  return {
+    isKleinunternehmer: provider.isKleinunternehmer,
+    revenueThisYear: revenue,
+    threshold: KLEINUNTERNEHMER_THRESHOLD,
+    approachingThreshold: provider.isKleinunternehmer && revenue >= KLEINUNTERNEHMER_THRESHOLD * 0.8,
+    exceededThreshold: provider.isKleinunternehmer && revenue >= KLEINUNTERNEHMER_THRESHOLD,
+  }
 }
 
 // ─── Get invoice archive for user ─────────────────────────────────────────────

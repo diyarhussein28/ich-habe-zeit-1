@@ -48,6 +48,7 @@ export interface User {
   phoneVerified: boolean
   verificationStatus: VerificationStatus
   profileImageUrl?: string
+  dateOfBirth?: string
   createdAt?: string
 }
 
@@ -121,6 +122,7 @@ export interface Order {
   commissionAmount?: number
   providerAmount?: number
   netProviderAmount?: number
+  releasedAmount?: number
   releaseDeadline?: string
   completedAt?: string
   releasedAt?: string

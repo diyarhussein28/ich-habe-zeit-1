@@ -44,7 +44,9 @@ export default function Dashboard() {
         <StatCard title="Umsatz gesamt" value={formatEur(s.totalRevenue)} sub={`${formatEur(s.revenueThisMonth)} diesen Monat`} icon="💶" color="green" />
       </div>
 
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-2 gap-4 xl:grid-cols-4">
+        <StatCard title="GMV heute" value={formatEur(s.dailyGmv)} icon="📈" color="blue" />
+        <StatCard title="KYC-Warteschlange" value={s.kycQueueSize} icon="🪪" color={s.kycQueueSize > 0 ? 'amber' : 'green'} />
         <StatCard title="Offene Streitfälle" value={s.openDisputes} icon="⚠️" color={s.openDisputes > 0 ? 'red' : 'green'} />
         <StatCard title="Neue Aufträge" value={s.newOrdersThisWeek} sub="diese Woche" icon="📋" color="amber" />
       </div>
@@ -91,7 +93,7 @@ export default function Dashboard() {
         <div className="card">
           <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
             <h2 className="font-semibold text-gray-900">KYC-Überprüfung ausstehend</h2>
-            <Link to="/users?status=KYC_PENDING" className="flex items-center gap-1 text-xs text-brand-600 hover:underline">
+            <Link to="/verifications" className="flex items-center gap-1 text-xs text-brand-600 hover:underline">
               Alle <ArrowRight size={12} />
             </Link>
           </div>
@@ -100,7 +102,7 @@ export default function Dashboard() {
               <p className="px-5 py-8 text-center text-sm text-gray-400">Keine ausstehenden KYC-Prüfungen</p>
             ) : (
               kycData?.data.map((u) => (
-                <Link key={u.id} to={`/users?highlight=${u.id}`} className="flex items-center gap-3 px-5 py-3.5 hover:bg-gray-50 transition-colors">
+                <Link key={u.id} to="/verifications" className="flex items-center gap-3 px-5 py-3.5 hover:bg-gray-50 transition-colors">
                   <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-brand-100 text-brand-700 text-sm font-bold">
                     {initials(u.displayName)}
                   </div>

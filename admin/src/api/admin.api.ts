@@ -1,9 +1,13 @@
 import { api } from './client'
 import type {
   AdminStats, AdminUser, AdminOrder, AdminDispute,
-  Category, CommissionRate, LegalDoc, KycDocument,
+  Category, CategoryCustomField, CommissionRate, LegalDoc, KycDocument,
   VerificationStatus, DisputeOutcome, PaginatedResponse,
   SupportTicket, SupportMessage, TicketStatus,
+  AdminReport, AdminTransaction, FraudSignals,
+  BlacklistEntry, BlacklistIdentifierType, BannedEntity, BanType,
+  FlaggedContent, ModerationStatus, PlatformSetting, AuditLogEntry,
+  PendingCategoryVerification,
 } from './types'
 
 export const adminApi = {
@@ -52,14 +56,74 @@ export const adminApi = {
   getCategories: () =>
     api.get<Category[]>('/api/admin/categories'),
 
-  createCategory: (data: { name: string; icon?: string; parentId?: string; description?: string }) =>
+  createCategory: (data: {
+    name: string; icon?: string; parentId?: string; description?: string
+    commissionRate?: number; geoRestrictions?: string[]; customFields?: CategoryCustomField[]
+    requiredVerificationDocTypes?: string[]; reducedVatEligible?: boolean; sortOrder?: number
+  }) =>
     api.post<Category>('/api/admin/categories', data),
 
-  updateCategory: (id: string, data: Partial<{ name: string; icon: string; isActive: boolean; commissionRate: number }>) =>
+  updateCategory: (id: string, data: Partial<{
+    name: string; icon: string; isActive: boolean; commissionRate: number
+    geoRestrictions: string[]; customFields: CategoryCustomField[]
+    requiredVerificationDocTypes: string[]; reducedVatEligible: boolean; sortOrder: number
+  }>) =>
     api.patch<Category>(`/api/admin/categories/${id}`, data),
 
   deleteCategory: (id: string) =>
     api.delete(`/api/admin/categories/${id}`),
+
+  // ── Provider category verification queue ──────────────────────────────
+  getPendingCategoryVerifications: () =>
+    api.get<{ items: PendingCategoryVerification[] }>('/api/admin/providers/pending-category-verification'),
+
+  reviewCategoryVerification: (userId: string, categoryId: string, isVerified: boolean) =>
+    api.patch(`/api/admin/providers/${userId}/categories/${categoryId}/verify`, { isVerified }),
+
+  // ── Reports & Transaction Monitor ───────────────────────────────────────
+  getReports: (params?: { from?: string; to?: string }) =>
+    api.get<AdminReport>('/api/admin/reports', { params }),
+
+  getTransactions: (params?: { status?: string; limit?: number; offset?: number }) =>
+    api.get<{ total: number; transactions: AdminTransaction[]; fraudSignals: FraudSignals }>('/api/admin/transactions', { params }),
+
+  // ── Moderation: blacklist ───────────────────────────────────────────────
+  getBlacklist: () =>
+    api.get<{ entries: BlacklistEntry[] }>('/api/admin/moderation/blacklist'),
+
+  addToBlacklist: (identifierType: BlacklistIdentifierType, identifierValue: string, reason: string) =>
+    api.post<{ entry: BlacklistEntry }>('/api/admin/moderation/blacklist', { identifierType, identifierValue, reason }),
+
+  removeFromBlacklist: (id: string) =>
+    api.delete(`/api/admin/moderation/blacklist/${id}`),
+
+  // ── Moderation: bans ─────────────────────────────────────────────────────
+  getBans: () =>
+    api.get<{ bans: BannedEntity[] }>('/api/admin/moderation/bans'),
+
+  addBan: (type: BanType, value: string, reason: string) =>
+    api.post<{ ban: BannedEntity }>('/api/admin/moderation/bans', { type, value, reason }),
+
+  removeBan: (id: string) =>
+    api.delete(`/api/admin/moderation/bans/${id}`),
+
+  // ── Moderation: content review queue ────────────────────────────────────
+  getModerationQueue: (status?: ModerationStatus) =>
+    api.get<{ items: FlaggedContent[] }>('/api/admin/moderation/content', { params: { status } }),
+
+  reviewContent: (id: string, status: 'APPROVED' | 'REJECTED', reviewNote?: string) =>
+    api.patch(`/api/admin/moderation/content/${id}`, { status, reviewNote }),
+
+  // ── Platform settings ────────────────────────────────────────────────────
+  getSettings: () =>
+    api.get<{ settings: PlatformSetting[] }>('/api/admin/settings'),
+
+  updateSetting: (key: string, value: unknown) =>
+    api.patch<{ setting: PlatformSetting }>(`/api/admin/settings/${key}`, { value }),
+
+  // ── Audit log ─────────────────────────────────────────────────────────────
+  getAuditLogs: (params?: { userId?: string; actionType?: string; page?: number; limit?: number }) =>
+    api.get<{ total: number; logs: AuditLogEntry[] }>('/api/admin/audit-logs', { params }),
 
   // ── Commission rates ───────────────────────────────────────────────────
   getCommissionRates: () =>

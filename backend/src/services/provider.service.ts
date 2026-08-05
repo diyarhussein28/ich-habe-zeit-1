@@ -184,6 +184,46 @@ export async function setProviderCategories(userId: string, categoryIds: string[
   })
 }
 
+// ─── Category-specific verification docs ──────────────────────────────────────
+
+export async function submitCategoryVerificationDocs(userId: string, categoryId: string, docUrls: string[]) {
+  const profile = await prisma.providerProfile.findUnique({ where: { userId } })
+  if (!profile) throw new Error('PROFILE_NOT_FOUND')
+
+  return prisma.providerCategory.update({
+    where: { providerProfileId_categoryId: { providerProfileId: profile.id, categoryId } },
+    data: { verificationDocUrls: docUrls, isVerified: false },
+  })
+}
+
+export async function reviewCategoryVerification(
+  providerUserId: string,
+  categoryId: string,
+  isVerified: boolean,
+  adminUserId: string
+) {
+  const profile = await prisma.providerProfile.findUnique({ where: { userId: providerUserId } })
+  if (!profile) throw new Error('PROFILE_NOT_FOUND')
+
+  const updated = await prisma.providerCategory.update({
+    where: { providerProfileId_categoryId: { providerProfileId: profile.id, categoryId } },
+    data: { isVerified },
+  })
+
+  await prisma.auditLog.create({
+    data: {
+      userId: adminUserId,
+      targetUserId: providerUserId,
+      actionType: isVerified ? 'CATEGORY_VERIFICATION_APPROVED' : 'CATEGORY_VERIFICATION_REJECTED',
+      targetEntity: 'ProviderCategory',
+      targetId: updated.id,
+      metadata: { categoryId } as Prisma.InputJsonValue,
+    },
+  })
+
+  return updated
+}
+
 // ─── Get public profile ───────────────────────────────────────────────────────
 
 export async function getPublicProfile(providerProfileId: string) {

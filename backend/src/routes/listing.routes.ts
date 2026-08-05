@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { prisma } from '../config/prisma.js'
 import { requireAuth, requireVerified } from '../middleware/auth.middleware.js'
 import * as orderService from '../services/order.service.js'
+import { haversineKm } from '../lib/geo.js'
 
 const createListingSchema = z.object({
   categoryId: z.string().uuid(),
@@ -27,8 +28,17 @@ export async function listingRoutes(app: FastifyInstance) {
         categoryId: z.string().uuid().optional(),
         city: z.string().optional(),
         plz: z.string().optional(),
+        q: z.string().min(1).max(100).optional(), // full-text search on title/description
+        priceMin: z.coerce.number().nonnegative().optional(),
         priceMax: z.coerce.number().positive().optional(),
         pricingModel: z.enum(['FIXED_PRICE', 'PER_HOUR']).optional(),
+        minRating: z.coerce.number().min(0).max(5).optional(),
+        verifiedOnly: z.coerce.boolean().optional(),
+        availableOnly: z.coerce.boolean().optional(),
+        lat: z.coerce.number().optional(),
+        lon: z.coerce.number().optional(),
+        radiusKm: z.coerce.number().positive().max(200).optional(),
+        sort: z.enum(['newest', 'price_asc', 'price_desc', 'rating', 'distance']).default('newest'),
         limit: z.coerce.number().int().min(1).max(50).default(20),
         offset: z.coerce.number().int().min(0).default(0),
       })
@@ -37,29 +47,90 @@ export async function listingRoutes(app: FastifyInstance) {
     const where: Record<string, unknown> = { status: 'ACTIVE' }
     if (query.categoryId) where.categoryId = query.categoryId
     if (query.city) where.city = { contains: query.city, mode: 'insensitive' }
-    if (query.plz) where.plz = { startsWith: query.plz.slice(0, 3) }
-    if (query.priceMax) where.price = { lte: query.priceMax }
+    if (query.plz && !(query.lat && query.lon && query.radiusKm)) {
+      where.plz = { startsWith: query.plz.slice(0, 3) }
+    }
+    if (query.q) {
+      where.OR = [
+        { title: { contains: query.q, mode: 'insensitive' } },
+        { description: { contains: query.q, mode: 'insensitive' } },
+      ]
+    }
+    if (query.priceMin || query.priceMax) {
+      where.price = {
+        ...(query.priceMin !== undefined && { gte: query.priceMin }),
+        ...(query.priceMax !== undefined && { lte: query.priceMax }),
+      }
+    }
     if (query.pricingModel) where.pricingModel = query.pricingModel
+    if (query.minRating !== undefined) {
+      where.provider = { ...(where.provider as object), averageRating: { gte: query.minRating } }
+    }
+    if (query.verifiedOnly) {
+      where.provider = {
+        ...(where.provider as object),
+        user: { verificationStatus: 'KYC_VERIFIED' },
+      }
+    }
+    if (query.availableOnly) {
+      where.provider = { ...(where.provider as object), isAvailable: true }
+    }
 
-    const [items, total] = await Promise.all([
+    const orderBy: Record<string, unknown> =
+      query.sort === 'price_asc'
+        ? { price: 'asc' }
+        : query.sort === 'price_desc'
+          ? { price: 'desc' }
+          : query.sort === 'rating'
+            ? { provider: { averageRating: 'desc' } }
+            : { createdAt: 'desc' } // 'newest' and 'distance' (distance sorted post-query below)
+
+    const useRadius = query.lat !== undefined && query.lon !== undefined && query.radiusKm !== undefined
+
+    // With a real radius search we can't paginate in SQL until distances are computed,
+    // so pull a bounded working set, filter/sort in-memory, then paginate.
+    const [rawItems, totalWithoutRadius] = await Promise.all([
       prisma.serviceListing.findMany({
         where,
         include: {
           category: { select: { id: true, name: true, icon: true } },
           provider: {
             include: {
-              user: { select: { id: true, displayName: true, profilePhotoUrl: true } },
+              user: { select: { id: true, displayName: true, profilePhotoUrl: true, verificationStatus: true } },
             },
           },
         },
-        orderBy: { createdAt: 'desc' },
-        take: query.limit,
-        skip: query.offset,
+        orderBy: orderBy as never,
+        take: useRadius ? 500 : query.limit,
+        skip: useRadius ? 0 : query.offset,
       }),
       prisma.serviceListing.count({ where }),
     ])
 
-    return reply.send({ items, total, limit: query.limit, offset: query.offset })
+    if (!useRadius) {
+      return reply.send({ items: rawItems, total: totalWithoutRadius, limit: query.limit, offset: query.offset })
+    }
+
+    const withDistance = rawItems
+      .map((item) => ({
+        item,
+        distanceKm:
+          item.lat != null && item.lon != null
+            ? haversineKm(query.lat!, query.lon!, item.lat, item.lon)
+            : null,
+      }))
+      // Fall back to keeping items without coordinates only if PLZ prefix matches (best-effort)
+      .filter((x) => x.distanceKm !== null ? x.distanceKm <= query.radiusKm! : (query.plz ? x.item.plz.startsWith(query.plz.slice(0, 2)) : false))
+      .sort((a, b) => (a.distanceKm ?? Infinity) - (b.distanceKm ?? Infinity))
+
+    const page = withDistance.slice(query.offset, query.offset + query.limit)
+
+    return reply.send({
+      items: page.map((x) => ({ ...x.item, distanceKm: x.distanceKm })),
+      total: withDistance.length,
+      limit: query.limit,
+      offset: query.offset,
+    })
   })
 
   // GET /listings/:id — listing detail (public, bumps view count)

@@ -1,6 +1,8 @@
 import { prisma } from '../config/prisma.js'
 import { getEffectiveCommissionRate } from './category.service.js'
 import { releaseOrderPayment } from './stripe.service.js'
+import { generateInvoicesForOrder } from './invoice.service.js'
+import { notifyEvent } from './notification.service.js'
 import { env } from '../config/env.js'
 import type { OrderStatus } from '@prisma/client'
 
@@ -153,8 +155,8 @@ export async function releasePayment(orderId: string, customerUserId: string, tr
   })
   if (!order) throw new Error('ORDER_NOT_FOUND')
 
-  return prisma.$transaction(async (tx) => {
-    const updated = await tx.order.update({
+  const updated = await prisma.$transaction(async (tx) => {
+    const updatedOrder = await tx.order.update({
       where: { id: orderId },
       data: {
         status: 'RELEASED',
@@ -187,8 +189,17 @@ export async function releasePayment(orderId: string, customerUserId: string, tr
       })
     }
 
-    return updated
+    return updatedOrder
   })
+
+  // Generate the Auftraggeber (service) + Dienstleister (commission) invoices —
+  // outside the transaction since it does its own, and a failure here must not
+  // roll back a payment that has already been released.
+  await generateInvoicesForOrder(orderId).catch((err) => {
+    console.error(`Invoice generation failed for order ${orderId}:`, err)
+  })
+
+  return updated
 }
 
 // ─── Auto-release (run by scheduled job) ─────────────────────────────────────
@@ -230,6 +241,10 @@ export async function processAutoReleases() {
           data: { orderId: order.id, status: 'RELEASED', triggeredBy: 'system' },
         })
       })
+
+      await generateInvoicesForOrder(order.id).catch((err) => {
+        console.error(`Invoice generation failed for auto-released order ${order.id}:`, err)
+      })
     })
   )
 
@@ -237,6 +252,63 @@ export async function processAutoReleases() {
     processed: expiredOrders.length,
     failed: results.filter((r) => r.status === 'rejected').length,
   }
+}
+
+// ─── Scheduled reminders (run by cron every 15 min; each guarded by a
+// per-order "already sent" timestamp so re-runs never double-notify) ─────────
+
+export async function sendAppointmentReminders() {
+  const windowStart = new Date()
+  const windowEnd = new Date(Date.now() + 24 * 60 * 60 * 1000)
+
+  const orders = await prisma.order.findMany({
+    where: {
+      status: 'IN_PROGRESS',
+      appointmentReminderSentAt: null,
+      offer: { proposedDate: { gte: windowStart, lte: windowEnd } },
+    },
+    include: { offer: { include: { provider: true } }, request: { select: { title: true } } },
+    take: 100,
+  })
+
+  for (const order of orders) {
+    const title = 'Terminerinnerung'
+    const body = `Erinnerung: "${order.request.title}" ist in weniger als 24 Stunden geplant.`
+    await Promise.all([
+      notifyEvent({ userId: order.customerId, pushType: 'APPOINTMENT_REMINDER', orderId: order.id, title, body }),
+      notifyEvent({ userId: order.offer.provider.userId, pushType: 'APPOINTMENT_REMINDER', orderId: order.id, title, body }),
+    ])
+    await prisma.order.update({ where: { id: order.id }, data: { appointmentReminderSentAt: new Date() } })
+  }
+
+  return { sent: orders.length }
+}
+
+export async function sendAutoReleaseWarnings() {
+  const windowStart = new Date()
+  const windowEnd = new Date(Date.now() + 24 * 60 * 60 * 1000)
+
+  const orders = await prisma.order.findMany({
+    where: {
+      status: 'AWAITING_RELEASE',
+      releaseWarningSentAt: null,
+      releaseDeadline: { gte: windowStart, lte: windowEnd },
+    },
+    take: 100,
+  })
+
+  for (const order of orders) {
+    await notifyEvent({
+      userId: order.customerId,
+      pushType: 'RELEASE_REMINDER',
+      orderId: order.id,
+      title: 'Zahlung wird bald automatisch freigegeben',
+      body: 'In weniger als 24 Stunden wird die Zahlung automatisch freigegeben, falls du nicht reagierst.',
+    })
+    await prisma.order.update({ where: { id: order.id }, data: { releaseWarningSentAt: new Date() } })
+  }
+
+  return { sent: orders.length }
 }
 
 // ─── Cancel order ─────────────────────────────────────────────────────────────

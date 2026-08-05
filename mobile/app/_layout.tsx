@@ -7,6 +7,7 @@ import { StatusBar } from 'expo-status-bar'
 import { StyleSheet } from 'react-native'
 import { StripeWrapper } from '../src/components/StripeWrapper'
 import { useAuthStore } from '../src/store/auth.store'
+import { useAccessibilityStore } from '../src/store/accessibility.store'
 import { setUnauthorizedHandler } from '../src/api/client'
 import { usePushNotifications } from '../src/hooks/usePushNotifications'
 import { colors } from '../src/constants/theme'
@@ -22,11 +23,13 @@ const queryClient = new QueryClient({
 
 function RootLayoutInner() {
   const { hydrate, logout } = useAuthStore()
+  const hydrateAccessibility = useAccessibilityStore((s) => s.hydrate)
 
   useEffect(() => {
     hydrate()
+    hydrateAccessibility()
     setUnauthorizedHandler(() => logout())
-  }, [hydrate, logout])
+  }, [hydrate, hydrateAccessibility, logout])
 
   usePushNotifications()
 
@@ -38,6 +41,9 @@ function RootLayoutInner() {
       <Stack.Screen name="(provider)" />
       <Stack.Screen name="chat" />
       <Stack.Screen name="support" />
+      <Stack.Screen name="addresses" />
+      <Stack.Screen name="notification-settings" />
+      <Stack.Screen name="reset-password" />
       <Stack.Screen name="+not-found" />
     </Stack>
   )

@@ -16,6 +16,12 @@ import LegalDocs from '@/pages/LegalDocs'
 import Security from '@/pages/Security'
 import Support from '@/pages/Support'
 import SupportDetail from '@/pages/SupportDetail'
+import Verifications from '@/pages/Verifications'
+import Transactions from '@/pages/Transactions'
+import Reports from '@/pages/Reports'
+import Settings from '@/pages/Settings'
+import AuditLog from '@/pages/AuditLog'
+import Moderation from '@/pages/Moderation'
 
 export default function App() {
   const { logout } = useAuthStore()
@@ -34,9 +40,15 @@ export default function App() {
         <Route path="/orders" element={<Orders />} />
         <Route path="/disputes" element={<Disputes />} />
         <Route path="/disputes/:id" element={<DisputeDetail />} />
+        <Route path="/verifications" element={<Verifications />} />
         <Route path="/categories" element={<Categories />} />
         <Route path="/commission-rates" element={<CommissionRates />} />
+        <Route path="/transactions" element={<Transactions />} />
+        <Route path="/reports" element={<Reports />} />
+        <Route path="/moderation" element={<Moderation />} />
         <Route path="/legal-docs" element={<LegalDocs />} />
+        <Route path="/settings" element={<Settings />} />
+        <Route path="/audit-log" element={<AuditLog />} />
         <Route path="/security" element={<Security />} />
         <Route path="/support" element={<Support />} />
         <Route path="/support/:id" element={<SupportDetail />} />

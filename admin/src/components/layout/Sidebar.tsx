@@ -2,6 +2,7 @@ import { NavLink } from 'react-router-dom'
 import {
   LayoutDashboard, Users, Package, AlertTriangle,
   Tag, Percent, FileText, LogOut, ShieldCheck, LifeBuoy,
+  BadgeCheck, Wallet, BarChart3, Settings as SettingsIcon, ScrollText, ShieldAlert,
 } from 'lucide-react'
 import { cn, initials } from '@/lib/utils'
 import { useAuthStore } from '@/store/auth.store'
@@ -10,12 +11,18 @@ import { authApi } from '@/api/admin.api'
 const nav = [
   { to: '/dashboard',        icon: LayoutDashboard, label: 'Dashboard' },
   { to: '/users',            icon: Users,            label: 'Benutzer' },
+  { to: '/verifications',    icon: BadgeCheck,       label: 'Verifizierungen' },
   { to: '/orders',           icon: Package,          label: 'Bestellungen' },
+  { to: '/transactions',     icon: Wallet,           label: 'Transaktionen' },
   { to: '/disputes',         icon: AlertTriangle,    label: 'Streitfälle' },
   { to: '/support',          icon: LifeBuoy,         label: 'Support' },
+  { to: '/moderation',       icon: ShieldAlert,      label: 'Moderation' },
   { to: '/categories',       icon: Tag,              label: 'Kategorien' },
   { to: '/commission-rates', icon: Percent,          label: 'Provisionen' },
+  { to: '/reports',          icon: BarChart3,        label: 'Berichte' },
   { to: '/legal-docs',       icon: FileText,         label: 'Rechtliches' },
+  { to: '/audit-log',        icon: ScrollText,       label: 'Audit-Log' },
+  { to: '/settings',         icon: SettingsIcon,     label: 'Einstellungen' },
   { to: '/security',         icon: ShieldCheck,      label: 'Sicherheit' },
 ]
 

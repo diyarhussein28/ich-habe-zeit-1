@@ -114,6 +114,31 @@ enum ListingStatus {
   ARCHIVED
 }
 
+enum BlacklistIdentifierType {
+  EMAIL
+  PHONE
+  DEVICE_ID
+  DOCUMENT_HASH
+}
+
+enum BanType {
+  IP
+  DEVICE
+}
+
+enum ModerationContentType {
+  PROFILE_PHOTO
+  SERVICE_PHOTO
+  REQUEST_PHOTO
+  COMPLETION_PHOTO
+}
+
+enum ModerationStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
 // ─── Users ────────────────────────────────────────────────────────────────────
 
 model User {
@@ -133,6 +158,9 @@ model User {
   mfaSecret         String?
   mfaRecoveryCodes  String[]           @default([])
   mangopayUserId    String?            @unique
+  stripeCustomerId  String?            @unique
+  registrationIp    String?
+  registrationDeviceId String?
   createdAt         DateTime           @default(now())
   updatedAt         DateTime           @updatedAt
   lastLoginAt       DateTime?
@@ -145,6 +173,7 @@ model User {
   sessions          Session[]
   otpCodes          OtpCode[]
   consentRecords    ConsentRecord[]
+  passwordResetTokens PasswordResetToken[]
   auditLogs         AuditLog[]         @relation("AuditLogUser")
   adminAuditLogs    AuditLog[]         @relation("AuditLogAdmin")
 
@@ -246,6 +275,8 @@ model ServiceArea {
   homePlz         String
   radiusKm        Int             @default(25)
   plzList         String[]        // specific PLZs in range
+  lat             Float?          // home PLZ pin, enables real haversine radius search
+  lon             Float?
 
   createdAt       DateTime        @default(now())
   updatedAt       DateTime        @updatedAt
@@ -269,6 +300,10 @@ model Category {
   geoRestrictions  String[]   // PLZ prefixes or city codes
   // Dynamic custom fields schema (JSON array of field definitions)
   customFields     Json?
+  // Document types a provider must have APPROVED KycDocuments/verification docs for before offering in this category
+  requiredVerificationDocTypes String[] @default([])
+  // Eligible for the 7% reduced VAT rate (§12 UStG) rather than the standard 19%
+  reducedVatEligible Boolean  @default(false)
   sortOrder        Int        @default(0)
 
   // Relations
@@ -435,6 +470,10 @@ model Order {
   // Partial release (for PARTIALLY_RELEASED)
   releasedAmount   Float?
   refundedAmount   Float?
+
+  // Notification dedup guards (scheduled jobs must not re-send)
+  appointmentReminderSentAt DateTime?
+  releaseWarningSentAt      DateTime?
 
   // Relations
   chat             Chat?
@@ -654,6 +693,7 @@ model Session {
   userId       String
   user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   token        String   @unique
+  deviceId     String?  // client-persisted device identifier, used for new-device detection & trust
   deviceInfo   String?
   ipAddress    String?
   isTrusted    Boolean  @default(false)
@@ -661,6 +701,20 @@ model Session {
   expiresAt    DateTime
   revokedAt    DateTime?
   createdAt    DateTime @default(now())
+
+  @@index([userId])
+  @@index([token])
+  @@index([userId, deviceId])
+}
+
+model PasswordResetToken {
+  id        String    @id @default(uuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  token     String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
 
   @@index([userId])
   @@index([token])
@@ -820,6 +874,8 @@ model ServiceListing {
 
   city         String
   plz          String
+  lat          Float?          // enables real haversine radius search; falls back to PLZ-prefix
+  lon          Float?
 
   status       ListingStatus   @default(ACTIVE)
   viewCount    Int             @default(0)
@@ -831,4 +887,56 @@ model ServiceListing {
   @@index([status])
   @@index([plz])
   @@index([providerId])
+}
+
+// ─── Moderation & Abuse Prevention ─────────────────────────────────────────────
+
+model ProviderBlacklist {
+  id              String                  @id @default(uuid())
+  identifierType  BlacklistIdentifierType
+  identifierValue String
+  reason          String
+  createdById     String
+  createdAt       DateTime                @default(now())
+
+  @@unique([identifierType, identifierValue])
+  @@index([identifierType, identifierValue])
+}
+
+model BannedEntity {
+  id          String   @id @default(uuid())
+  type        BanType
+  value       String
+  reason      String
+  createdById String
+  createdAt   DateTime @default(now())
+
+  @@unique([type, value])
+  @@index([type, value])
+}
+
+model FlaggedContent {
+  id           String                @id @default(uuid())
+  contentType  ModerationContentType
+  contentUrl   String
+  ownerId      String                // userId of the uploader
+  status       ModerationStatus      @default(PENDING)
+  reviewedById String?
+  reviewedAt   DateTime?
+  reviewNote   String?
+  createdAt    DateTime              @default(now())
+
+  @@index([status])
+  @@index([ownerId])
+}
+
+// ─── Platform Settings (admin-configurable, no deploy required) ───────────────
+
+model PlatformSetting {
+  id          String   @id @default(uuid())
+  key         String   @unique
+  value       Json
+  updatedById String?
+  updatedAt   DateTime @updatedAt
+  createdAt   DateTime @default(now())
 }

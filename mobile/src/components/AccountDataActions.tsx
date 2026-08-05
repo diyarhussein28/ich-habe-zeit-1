@@ -8,6 +8,8 @@ import { TOKEN_KEY } from '../api/client'
 import { profileApi } from '../api/profile.api'
 import { authApi } from '../api/auth.api'
 import { useAuthStore } from '../store/auth.store'
+import { ConfirmModal } from './ui/ConfirmModal'
+import { getApiErrorMessage } from '../api/client'
 import { colors, spacing, fontSize, fontWeight, radius } from '../constants/theme'
 
 const BASE_URL = process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:3000'
@@ -17,6 +19,7 @@ export function AccountDataActions() {
   const { logout } = useAuthStore()
   const [downloading, setDownloading] = useState(false)
   const [deleting, setDeleting] = useState(false)
+  const [showConfirm, setShowConfirm] = useState(false)
 
   const handleDownload = async () => {
     if (downloading) return
@@ -47,17 +50,6 @@ export function AccountDataActions() {
     }
   }
 
-  const confirmDelete = () => {
-    Alert.alert(
-      'Konto wirklich löschen?',
-      'Diese Aktion kann nicht rückgängig gemacht werden. Deine persönlichen Daten werden entfernt; bereits abgeschlossene Aufträge und Rechnungen bleiben aus rechtlichen Gründen gespeichert.',
-      [
-        { text: 'Abbrechen', style: 'cancel' },
-        { text: 'Konto löschen', style: 'destructive', onPress: handleDelete },
-      ],
-    )
-  }
-
   const handleDelete = async () => {
     setDeleting(true)
     try {
@@ -65,13 +57,10 @@ export function AccountDataActions() {
       try { await authApi.logout() } catch {}
       await logout()
       router.replace('/(auth)/login')
-    } catch {
-      Alert.alert(
-        'Löschen nicht möglich',
-        'Dein Konto hat noch aktive Aufträge. Bitte schließe diese zuerst ab.',
-      )
-    } finally {
+    } catch (err) {
       setDeleting(false)
+      setShowConfirm(false)
+      Alert.alert('Löschen nicht möglich', getApiErrorMessage(err) || 'Dein Konto hat noch aktive Aufträge. Bitte schließe diese zuerst ab.')
     }
   }
 
@@ -80,9 +69,20 @@ export function AccountDataActions() {
       <TouchableOpacity style={styles.row} onPress={handleDownload} disabled={downloading}>
         {downloading ? <ActivityIndicator color={colors.primary} /> : <Text style={styles.rowLabel}>📥 Meine Daten herunterladen</Text>}
       </TouchableOpacity>
-      <TouchableOpacity style={styles.row} onPress={confirmDelete} disabled={deleting}>
+      <TouchableOpacity style={styles.row} onPress={() => setShowConfirm(true)} disabled={deleting}>
         {deleting ? <ActivityIndicator color={colors.error} /> : <Text style={[styles.rowLabel, styles.dangerLabel]}>🗑️ Konto löschen</Text>}
       </TouchableOpacity>
+
+      <ConfirmModal
+        visible={showConfirm}
+        title="Konto wirklich löschen?"
+        message="Diese Aktion kann nicht rückgängig gemacht werden. Deine persönlichen Daten werden entfernt; bereits abgeschlossene Aufträge und Rechnungen bleiben aus rechtlichen Gründen gespeichert."
+        confirmLabel="Konto löschen"
+        destructive
+        loading={deleting}
+        onConfirm={handleDelete}
+        onCancel={() => setShowConfirm(false)}
+      />
     </View>
   )
 }

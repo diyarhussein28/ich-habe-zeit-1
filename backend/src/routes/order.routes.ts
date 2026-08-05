@@ -4,7 +4,7 @@ import * as orderService from '../services/order.service.js'
 import * as chatService from '../services/chat.service.js'
 import * as disputeService from '../services/dispute.service.js'
 import { requireAuth, requireVerified, requireRole } from '../middleware/auth.middleware.js'
-import { sendPushToUser } from '../services/push.service.js'
+import { notifyEvent } from '../services/notification.service.js'
 import { prisma } from '../config/prisma.js'
 import {
   createPaymentIntentForOrder,
@@ -50,12 +50,13 @@ export async function orderRoutes(app: FastifyInstance) {
         include: { provider: true },
       })
       if (offer?.provider?.userId) {
-        sendPushToUser(
-          offer.provider.userId,
-          { type: 'OFFER_ACCEPTED', orderId: order.id },
-          'Angebot angenommen!',
-          'Dein Angebot wurde angenommen. Bitte lass die Zahlung bestätigen.',
-        ).catch(() => {})
+        notifyEvent({
+          userId: offer.provider.userId,
+          pushType: 'OFFER_ACCEPTED',
+          orderId: order.id,
+          title: 'Angebot angenommen!',
+          body: 'Dein Angebot wurde angenommen. Bitte lass die Zahlung bestätigen.',
+        }).catch(() => {})
       }
 
       return reply.status(201).send({ order })
@@ -127,12 +128,13 @@ export async function orderRoutes(app: FastifyInstance) {
         include: { offer: { include: { provider: true } } },
       })
       if (fullOrder?.offer?.provider?.userId) {
-        sendPushToUser(
-          fullOrder.offer.provider.userId,
-          { type: 'PAYMENT_CAPTURED', orderId: id },
-          'Zahlung gesichert',
-          'Die Zahlung wurde im Treuhandkonto hinterlegt. Du kannst mit der Arbeit beginnen.',
-        ).catch(() => {})
+        notifyEvent({
+          userId: fullOrder.offer.provider.userId,
+          pushType: 'PAYMENT_CAPTURED',
+          orderId: id,
+          title: 'Zahlung gesichert',
+          body: 'Die Zahlung wurde im Treuhandkonto hinterlegt. Du kannst mit der Arbeit beginnen.',
+        }).catch(() => {})
       }
 
       return reply.send({ order })
@@ -186,12 +188,13 @@ export async function orderRoutes(app: FastifyInstance) {
       const order = await orderService.markComplete(id, request.userId, body.data.photoUrls, body.data.note)
 
       // Notify customer the job is done and awaiting release
-      sendPushToUser(
-        order.customerId,
-        { type: 'ORDER_UPDATE', orderId: id },
-        'Auftrag abgeschlossen',
-        'Der Anbieter hat die Arbeit als erledigt markiert. Bitte prüfe und gib die Zahlung frei.',
-      ).catch(() => {})
+      notifyEvent({
+        userId: order.customerId,
+        pushType: 'ORDER_UPDATE',
+        orderId: id,
+        title: 'Auftrag abgeschlossen',
+        body: 'Der Anbieter hat die Arbeit als erledigt markiert. Bitte prüfe und gib die Zahlung frei.',
+      }).catch(() => {})
 
       return reply.send({ order })
     } catch (err: unknown) {
@@ -216,12 +219,26 @@ export async function orderRoutes(app: FastifyInstance) {
         include: { offer: { include: { provider: true } } },
       })
       if (fullOrder?.offer?.provider?.userId) {
-        sendPushToUser(
-          fullOrder.offer.provider.userId,
-          { type: 'ORDER_UPDATE', orderId: id },
-          'Zahlung freigegeben',
-          'Der Kunde hat die Zahlung freigegeben. Das Geld wird ausgezahlt.',
-        ).catch(() => {})
+        notifyEvent({
+          userId: fullOrder.offer.provider.userId,
+          pushType: 'ORDER_UPDATE',
+          orderId: id,
+          title: 'Zahlung freigegeben',
+          body: 'Der Kunde hat die Zahlung freigegeben. Das Geld wird ausgezahlt.',
+        }).catch(() => {})
+      }
+
+      // Invoices are generated as part of releasePayment — notify both parties
+      const invoices = await prisma.invoice.findMany({ where: { orderId: id } })
+      for (const invoice of invoices) {
+        if (invoice.receiverId === 'platform') continue
+        notifyEvent({
+          userId: invoice.receiverId,
+          pushType: 'INVOICE_ISSUED',
+          orderId: id,
+          title: 'Neue Rechnung verfügbar',
+          body: `Rechnung ${invoice.invoiceNumber} steht in deinem Rechnungsarchiv bereit.`,
+        }).catch(() => {})
       }
 
       return reply.send({ order })

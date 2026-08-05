@@ -41,6 +41,10 @@ export default function LoginScreen() {
     setLoading(true)
     try {
       const res = await authApi.login({ email: email.trim().toLowerCase(), password })
+      if ('deviceChallengeRequired' in res.data) {
+        router.push({ pathname: '/(auth)/device-challenge', params: { challengeToken: res.data.challengeToken } })
+        return
+      }
       await login(res.data.token, res.data.user)
       // Root index.tsx will redirect based on role
       router.replace('/')

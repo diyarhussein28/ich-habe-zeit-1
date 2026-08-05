@@ -68,6 +68,111 @@ export interface AdminStats {
   newUsersThisWeek: number
   newOrdersThisWeek: number
   revenueThisMonth: number
+  dailyGmv: number
+  kycQueueSize: number
+}
+
+export interface AdminReport {
+  period: { from: string; to: string }
+  gmv: number
+  platformRevenue: number
+  orderVolume: number
+  completedOrderVolume: number
+  averageOrderValue: number
+  conversionRate: number
+  disputeRate: number
+  autoReleaseRate: number
+  providerActivationRate: number
+  avgKycQueueHours: number
+  categoryPerformance: Array<{ categoryId: string; name: string; gmv: number; orders: number; disputes: number }>
+  cityPerformance: Array<{ city: string; gmv: number; orders: number }>
+}
+
+export interface AdminTransaction {
+  id: string
+  status: OrderStatus
+  paymentStatus: string
+  grossAmount: number
+  commissionAmount: number
+  netProviderAmount: number
+  releasedAmount?: number
+  refundedAmount?: number
+  stripePaymentIntentId?: string
+  stripeTransferId?: string
+  stripePayoutId?: string
+  createdAt: string
+  updatedAt: string
+  customer: { id: string; displayName: string; email: string }
+  provider: { id: string; displayName: string }
+  isFlaggedForFraud: boolean
+}
+
+export interface FraudSignals {
+  repeatedFailedPaymentUserIds: string[]
+  highDisputeProviderIds: string[]
+}
+
+export type BlacklistIdentifierType = 'EMAIL' | 'PHONE' | 'DEVICE_ID' | 'DOCUMENT_HASH'
+export type BanType = 'IP' | 'DEVICE'
+
+export interface BlacklistEntry {
+  id: string
+  identifierType: BlacklistIdentifierType
+  identifierValue: string
+  reason: string
+  createdAt: string
+}
+
+export interface BannedEntity {
+  id: string
+  type: BanType
+  value: string
+  reason: string
+  createdAt: string
+}
+
+export type ModerationContentType = 'PROFILE_PHOTO' | 'SERVICE_PHOTO' | 'REQUEST_PHOTO' | 'COMPLETION_PHOTO'
+export type ModerationStatus = 'PENDING' | 'APPROVED' | 'REJECTED'
+
+export interface FlaggedContent {
+  id: string
+  contentType: ModerationContentType
+  contentUrl: string
+  ownerId: string
+  status: ModerationStatus
+  reviewedById?: string
+  reviewedAt?: string
+  reviewNote?: string
+  createdAt: string
+}
+
+export interface PlatformSetting {
+  key: string
+  value: unknown
+  isOverridden: boolean
+}
+
+export interface AuditLogEntry {
+  id: string
+  userId?: string
+  targetUserId?: string
+  actionType: string
+  targetEntity?: string
+  targetId?: string
+  metadata?: Record<string, unknown>
+  ipAddress?: string
+  createdAt: string
+  user?: { id: string; displayName: string; email: string; role: string }
+  targetUser?: { id: string; displayName: string; email: string }
+}
+
+export interface PendingCategoryVerification {
+  id: string
+  categoryId: string
+  isVerified: boolean
+  verificationDocUrls: string[]
+  category: { id: string; name: string }
+  providerProfile: { user: { id: string; displayName: string; email: string } }
 }
 
 export interface AdminUser {
@@ -125,6 +230,14 @@ export interface AdminDispute {
   }>
 }
 
+export interface CategoryCustomField {
+  key: string
+  label: string
+  type: 'text' | 'number' | 'select' | 'boolean'
+  required?: boolean
+  options?: string[]
+}
+
 export interface Category {
   id: string
   name: string
@@ -136,6 +249,11 @@ export interface Category {
   children?: Category[]
   isActive: boolean
   commissionRate?: number
+  geoRestrictions: string[]
+  customFields?: CategoryCustomField[]
+  requiredVerificationDocTypes: string[]
+  reducedVatEligible: boolean
+  sortOrder: number
 }
 
 export interface CommissionRate {

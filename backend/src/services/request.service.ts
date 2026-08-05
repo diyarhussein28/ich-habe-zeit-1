@@ -34,6 +34,25 @@ export async function createRequest(input: CreateRequestInput) {
   const category = await prisma.category.findUnique({ where: { id: input.categoryId } })
   if (!category || !category.isActive) throw new Error('CATEGORY_NOT_FOUND')
 
+  // Geo-restriction: category may be limited to specific PLZ prefixes / city codes
+  if (category.geoRestrictions.length > 0) {
+    const matches = category.geoRestrictions.some(
+      (restriction) => input.plz.startsWith(restriction) || input.addressCity?.toLowerCase() === restriction.toLowerCase()
+    )
+    if (!matches) throw new Error('CATEGORY_NOT_AVAILABLE_IN_AREA')
+  }
+
+  // Dynamic custom fields: enforce required fields defined by Admin for this category
+  if (Array.isArray(category.customFields)) {
+    const fieldDefs = category.customFields as Array<{ key: string; label: string; required?: boolean }>
+    const values = (input.customFieldValues ?? {}) as Record<string, unknown>
+    for (const field of fieldDefs) {
+      if (field.required && (values[field.key] === undefined || values[field.key] === '')) {
+        throw new Error(`CUSTOM_FIELD_REQUIRED:${field.key}`)
+      }
+    }
+  }
+
   const expiresAt = new Date()
   expiresAt.setDate(expiresAt.getDate() + 7) // 7 days to receive offers
 
@@ -106,6 +125,8 @@ export interface ListRequestsFilter {
   customerId?: string
   urgency?: UrgencyFlag
   budgetMax?: number
+  q?: string
+  sort?: 'newest' | 'urgency' | 'budget_asc' | 'budget_desc'
   limit?: number
   offset?: number
 }
@@ -123,6 +144,21 @@ export async function listRequests(filter: ListRequestsFilter = {}) {
   if (filter.budgetMax) {
     where.budgetMax = { lte: filter.budgetMax }
   }
+  if (filter.q) {
+    where.OR = [
+      { title: { contains: filter.q, mode: 'insensitive' } },
+      { description: { contains: filter.q, mode: 'insensitive' } },
+    ]
+  }
+
+  const orderBy =
+    filter.sort === 'budget_asc'
+      ? [{ budgetMax: 'asc' as const }]
+      : filter.sort === 'budget_desc'
+        ? [{ budgetMax: 'desc' as const }]
+        : filter.sort === 'newest'
+          ? [{ createdAt: 'desc' as const }]
+          : [{ urgency: 'desc' as const }, { createdAt: 'desc' as const }] // default: 'urgency'
 
   const [total, items] = await Promise.all([
     prisma.serviceRequest.count({ where }),
@@ -132,7 +168,7 @@ export async function listRequests(filter: ListRequestsFilter = {}) {
         category: { select: { id: true, name: true, slug: true, icon: true } },
         _count: { select: { offers: true } },
       },
-      orderBy: [{ urgency: 'desc' }, { createdAt: 'desc' }],
+      orderBy,
       take: filter.limit ?? 20,
       skip: filter.offset ?? 0,
     }),

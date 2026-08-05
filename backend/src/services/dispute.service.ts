@@ -5,6 +5,21 @@ import {
   refundOrderPayment,
   partialReleaseOrderPayment,
 } from './stripe.service.js'
+import { generateInvoicesForOrder } from './invoice.service.js'
+import { notifyEvent } from './notification.service.js'
+
+async function notifyBothParties(orderId: string, opts: { title: string; body: string; pushType: 'DISPUTE_OPENED' | 'DISPUTE_UPDATE' }) {
+  const order = await prisma.order.findUnique({
+    where: { id: orderId },
+    select: { customerId: true, offer: { select: { provider: { select: { userId: true } } } } },
+  })
+  if (!order) return
+  const smsBody = `Ich habe Zeit: ${opts.title} — bitte öffnen Sie die App für Details.`
+  await Promise.all([
+    notifyEvent({ userId: order.customerId, pushType: opts.pushType, title: opts.title, body: opts.body, orderId, smsBody }),
+    notifyEvent({ userId: order.offer.provider.userId, pushType: opts.pushType, title: opts.title, body: opts.body, orderId, smsBody }),
+  ])
+}
 
 export async function openDispute(data: {
   orderId: string
@@ -32,7 +47,7 @@ export async function openDispute(data: {
     throw new Error('DESCRIPTION_TOO_SHORT')
   }
 
-  return prisma.$transaction(async (tx) => {
+  const result = await prisma.$transaction(async (tx) => {
     const dispute = await tx.dispute.create({
       data: {
         orderId: data.orderId,
@@ -72,6 +87,14 @@ export async function openDispute(data: {
 
     return dispute
   })
+
+  await notifyBothParties(data.orderId, {
+    pushType: 'DISPUTE_OPENED',
+    title: 'Streitfall eröffnet',
+    body: 'Ein Streitfall wurde eröffnet. Die Zahlung ist bis zur Entscheidung eingefroren.',
+  })
+
+  return result
 }
 
 // Bank-initiated chargeback — not a user action, so it skips the normal
@@ -178,7 +201,7 @@ export async function resolveDispute(data: {
   // REWORK_AGREEMENT and ESCALATED take no financial action — handle first
   // and return before touching Stripe or computing amounts.
   if (data.outcome === 'REWORK_AGREEMENT' || data.outcome === 'ESCALATED') {
-    return prisma.$transaction(async (tx) => {
+    const result = await prisma.$transaction(async (tx) => {
       await tx.dispute.update({
         where: { id: data.disputeId },
         data: {
@@ -209,6 +232,17 @@ export async function resolveDispute(data: {
 
       return dispute
     })
+
+    await notifyBothParties(order.id, {
+      pushType: 'DISPUTE_UPDATE',
+      title: 'Streitfall-Entscheidung',
+      body:
+        data.outcome === 'REWORK_AGREEMENT'
+          ? 'Beide Parteien haben sich auf eine Nachbesserung geeinigt. Der Auftrag läuft weiter.'
+          : 'Der Streitfall wurde an die externe Schlichtungsstelle weitergeleitet.',
+    })
+
+    return result
   }
 
   // The remaining outcomes move real money — call Stripe first so a failed
@@ -247,7 +281,7 @@ export async function resolveDispute(data: {
     }
   }
 
-  return prisma.$transaction(async (tx) => {
+  const result = await prisma.$transaction(async (tx) => {
     await tx.dispute.update({
       where: { id: data.disputeId },
       data: {
@@ -300,6 +334,20 @@ export async function resolveDispute(data: {
 
     return dispute
   })
+
+  // Auftraggeber/Dienstleister invoices for whatever was actually retained
+  // (no-op for FULL_REFUND — nothing was retained, so nothing to invoice).
+  await generateInvoicesForOrder(order.id).catch((err) => {
+    console.error(`Invoice generation failed for disputed order ${order.id}:`, err)
+  })
+
+  await notifyBothParties(order.id, {
+    pushType: 'DISPUTE_UPDATE',
+    title: 'Streitfall-Entscheidung',
+    body: `Der Streitfall wurde entschieden: ${data.outcome.replace(/_/g, ' ')}.`,
+  })
+
+  return result
 }
 
 export async function getDisputeById(disputeId: string, userId: string) {

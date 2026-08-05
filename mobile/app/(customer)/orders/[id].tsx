@@ -23,6 +23,7 @@ import { Button } from '../../../src/components/ui/Button'
 import { StarRating } from '../../../src/components/ui/StarRating'
 import { getApiErrorMessage } from '../../../src/api/client'
 import { colors, spacing, fontSize, fontWeight, radius } from '../../../src/constants/theme'
+import { formatEur } from '../../../src/utils/currency'
 import { formatDate } from '../../../src/utils/date'
 import { useStripe } from '@stripe/stripe-react-native'
 
@@ -212,10 +213,10 @@ export default function CustomerOrderDetailScreen() {
         {/* Amounts */}
         <Card style={styles.card}>
           <Text style={styles.sectionLabel}>Zahlungsübersicht</Text>
-          <AmountRow label="Servicebetrag" value={`${(order.grossAmount ?? order.totalAmount ?? 0).toFixed(2)} €`} />
-          <AmountRow label="Plattformgebühr" value={`${(order.commissionAmount ?? order.platformFee ?? 0).toFixed(2)} €`} />
+          <AmountRow label="Servicebetrag" value={formatEur(order.grossAmount ?? order.totalAmount ?? 0)} />
+          <AmountRow label="Plattformgebühr" value={formatEur(order.commissionAmount ?? order.platformFee ?? 0)} />
           <View style={styles.divider} />
-          <AmountRow label="Gesamtbetrag" value={`${(order.grossAmount ?? order.totalAmount ?? 0).toFixed(2)} €`} bold />
+          <AmountRow label="Gesamtbetrag" value={formatEur(order.grossAmount ?? order.totalAmount ?? 0)} bold />
         </Card>
 
         {/* Release countdown */}
@@ -239,7 +240,7 @@ export default function CustomerOrderDetailScreen() {
         {/* Status-specific actions */}
         {order.status === 'AWAITING_PAYMENT' && (
           <Button
-            label={`Jetzt bezahlen – ${(order.grossAmount ?? order.totalAmount ?? 0).toFixed(2)} €`}
+            label={`Jetzt bezahlen – ${formatEur(order.grossAmount ?? order.totalAmount ?? 0)}`}
             onPress={() => setShowPayModal(true)}
             style={styles.actionBtn}
           />
@@ -253,7 +254,7 @@ export default function CustomerOrderDetailScreen() {
                   Zahlung freigeben?
                 </Text>
                 <Text style={{ fontSize: fontSize.sm, color: colors.textSecondary, marginBottom: spacing.md }}>
-                  Damit wird der Betrag von {(order.netProviderAmount ?? order.providerAmount ?? 0).toFixed(2)} € an den Dienstleister ausgezahlt.
+                  Damit wird der Betrag von {formatEur(order.netProviderAmount ?? order.providerAmount ?? 0)} an den Dienstleister ausgezahlt.
                 </Text>
                 {releaseError ? <Text style={styles.errorText}>{releaseError}</Text> : null}
                 <View style={{ flexDirection: 'row', gap: spacing.md }}>
@@ -308,7 +309,7 @@ export default function CustomerOrderDetailScreen() {
 
             <View style={styles.payRow}>
               <Text style={styles.payLabel}>Gesamtbetrag</Text>
-              <Text style={styles.payAmount}>{(order.grossAmount ?? order.totalAmount ?? 0).toFixed(2)} €</Text>
+              <Text style={styles.payAmount}>{formatEur(order.grossAmount ?? order.totalAmount ?? 0)}</Text>
             </View>
 
             <Card style={styles.escrowInfo}>

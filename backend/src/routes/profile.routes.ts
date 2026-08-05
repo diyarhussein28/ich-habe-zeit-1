@@ -295,6 +295,29 @@ export async function profileRoutes(app: FastifyInstance) {
     }
   )
 
+  // POST /profile/provider/categories/:categoryId/verification-docs
+  app.post(
+    '/provider/categories/:categoryId/verification-docs',
+    { preHandler: requireRole('PROVIDER') },
+    async (request, reply) => {
+      const { categoryId } = request.params as { categoryId: string }
+      const body = z.object({ docUrls: z.array(z.string().url()).min(1).max(5) }).safeParse(request.body)
+      if (!body.success) return reply.status(400).send({ error: 'VALIDATION_ERROR', details: body.error.flatten() })
+
+      try {
+        const result = await providerService.submitCategoryVerificationDocs(
+          request.userId,
+          categoryId,
+          body.data.docUrls
+        )
+        return reply.send({ providerCategory: result })
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : 'ERROR'
+        return reply.status(400).send({ error: msg })
+      }
+    }
+  )
+
   // GET /profile/providers/:id — public, no auth required
   app.get('/providers/:id', async (request, reply) => {
     const { id } = request.params as { id: string }

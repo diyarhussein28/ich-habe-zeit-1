@@ -1,5 +1,5 @@
 import React, { useState } from 'react'
-import { View, Text, TouchableOpacity, StyleSheet, Alert, ScrollView, Linking, TextInput, Switch } from 'react-native'
+import { View, Text, TouchableOpacity, StyleSheet, Alert, ScrollView, Linking, TextInput } from 'react-native'
 import { useRouter } from 'expo-router'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
@@ -34,9 +34,6 @@ export default function ProviderProfileScreen() {
   const [editing, setEditing] = useState(false)
   const [displayName, setDisplayName] = useState('')
   const [saveError, setSaveError] = useState<string | null>(null)
-  const [showNotifications, setShowNotifications] = useState(false)
-  const [pushEnabled, setPushEnabled] = useState(true)
-  const [emailEnabled, setEmailEnabled] = useState(true)
   const [showAgb, setShowAgb] = useState(false)
   const [showAccountData, setShowAccountData] = useState(false)
   const [showCategoryEditor, setShowCategoryEditor] = useState(false)
@@ -224,7 +221,17 @@ export default function ProviderProfileScreen() {
         )}
 
         <Card style={styles.card}>
-          <MenuItem emoji="🏠" label="Servicegebiete" onPress={() => {}} />
+          <MenuItem emoji="📊" label="Übersicht & Auszahlungen" onPress={() => router.push('/(provider)/profile/dashboard')} />
+          <Divider />
+          <MenuItem emoji="✎" label="Profil erweitern" onPress={() => router.push('/(provider)/profile/edit')} />
+          <Divider />
+          <MenuItem emoji="🏠" label="Servicegebiete" onPress={() => router.push('/(provider)/profile/service-areas')} />
+          <Divider />
+          <MenuItem emoji="🕐" label="Arbeitszeiten" onPress={() => router.push('/(provider)/profile/working-hours')} />
+          <Divider />
+          <MenuItem emoji="🧾" label="Steuerangaben" onPress={() => router.push('/(provider)/profile/tax-info')} />
+          <Divider />
+          <MenuItem emoji="📍" label="Meine Adressen" onPress={() => router.push('/addresses')} />
           <Divider />
           <MenuItem emoji="📋" label="Kategorien" onPress={() => {
             setSelectedCategoryIds((myCategories ?? []).map((c) => c.id))
@@ -267,19 +274,7 @@ export default function ProviderProfileScreen() {
           <Divider />
           <MenuItem emoji="📄" label="Rechnungen" onPress={() => router.push('./invoices')} />
           <Divider />
-          <MenuItem emoji="🔔" label="Benachrichtigungen" onPress={() => setShowNotifications((v) => !v)} />
-          {showNotifications && (
-            <View style={styles.notifPanel}>
-              <View style={styles.notifRow}>
-                <Text style={styles.notifLabel}>Push-Benachrichtigungen</Text>
-                <Switch value={pushEnabled} onValueChange={setPushEnabled} trackColor={{ true: colors.primary }} />
-              </View>
-              <View style={styles.notifRow}>
-                <Text style={styles.notifLabel}>E-Mail-Benachrichtigungen</Text>
-                <Switch value={emailEnabled} onValueChange={setEmailEnabled} trackColor={{ true: colors.primary }} />
-              </View>
-            </View>
-          )}
+          <MenuItem emoji="🔔" label="Benachrichtigungen" onPress={() => router.push('/notification-settings')} />
           <Divider />
           <MenuItem emoji="📄" label="Rechtliches" onPress={() => setShowAgb((v) => !v)} />
           {showAgb && <LegalDocsAccordion />}
@@ -358,8 +353,6 @@ const styles = StyleSheet.create({
   stripeReadyCard: { backgroundColor: '#F0FDF4', borderColor: '#86EFAC' },
   stripeReadyText: { fontSize: fontSize.sm, fontWeight: fontWeight.semibold, color: '#16A34A' },
   notifPanel: { backgroundColor: colors.background, borderRadius: radius.md, padding: spacing.md, marginVertical: spacing.xs, gap: spacing.sm },
-  notifRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  notifLabel: { fontSize: fontSize.sm, color: colors.text },
   catChip: { backgroundColor: colors.primaryLight, borderRadius: radius.full, paddingHorizontal: spacing.sm, paddingVertical: 3 },
   catChipText: { fontSize: fontSize.xs, color: colors.primary, fontWeight: fontWeight.medium },
   catRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: spacing.sm, gap: spacing.sm },

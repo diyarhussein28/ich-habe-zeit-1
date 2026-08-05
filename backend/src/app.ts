@@ -5,6 +5,7 @@ import helmet from '@fastify/helmet'
 import rateLimit from '@fastify/rate-limit'
 import websocket from '@fastify/websocket'
 import multipart from '@fastify/multipart'
+import fastifyStatic from '@fastify/static'
 import { env } from './config/env.js'
 import { authRoutes } from './routes/auth.routes.js'
 import { categoryRoutes } from './routes/category.routes.js'
@@ -19,7 +20,9 @@ import { stripeRoutes } from './routes/stripe.routes.js'
 import { listingRoutes } from './routes/listing.routes.js'
 import { legalRoutes } from './routes/legal.routes.js'
 import { supportRoutes } from './routes/support.routes.js'
+import { mediaRoutes } from './routes/media.routes.js'
 import { chatGateway } from './ws/chat.gateway.js'
+import { PUBLIC_UPLOADS_DIR } from './services/media.service.js'
 
 export async function buildApp() {
   const app = Fastify({
@@ -50,8 +53,16 @@ export async function buildApp() {
     timeWindow: '1 minute',
   })
 
-  // Multipart (for KYC uploads)
+  // Multipart (for KYC + media uploads)
   await app.register(multipart)
+
+  // Static file serving for publicly-viewable images (profile/service/request/completion photos)
+  await (await import('node:fs/promises')).mkdir(PUBLIC_UPLOADS_DIR, { recursive: true })
+  await app.register(fastifyStatic, {
+    root: PUBLIC_UPLOADS_DIR,
+    prefix: '/media/',
+    decorateReply: false,
+  })
 
   // WebSocket
   await app.register(websocket)
@@ -71,6 +82,7 @@ export async function buildApp() {
   await app.register(listingRoutes, { prefix: '/api/listings' })
   await app.register(legalRoutes, { prefix: '/api/legal-docs' })
   await app.register(supportRoutes, { prefix: '/api/support' })
+  await app.register(mediaRoutes, { prefix: '/api/media' })
 
   // Health check
   app.get('/health', async () => ({ status: 'ok', timestamp: new Date().toISOString() }))

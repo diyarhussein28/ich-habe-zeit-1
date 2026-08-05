@@ -19,6 +19,7 @@ import { Button } from '../../../src/components/ui/Button'
 import { StarRating } from '../../../src/components/ui/StarRating'
 import { getApiErrorMessage } from '../../../src/api/client'
 import { colors, spacing, fontSize, fontWeight, radius, shadow } from '../../../src/constants/theme'
+import { formatEur } from '../../../src/utils/currency'
 import type { Offer } from '../../../src/api/types'
 import { formatDate } from '../../../src/utils/date'
 
@@ -214,7 +215,7 @@ export default function RequestDetailScreen() {
               <>
                 <View style={styles.offerSummary}>
                   <Text style={styles.offerSummaryLabel}>Preis</Text>
-                  <Text style={styles.offerSummaryPrice}>{(selectedOffer.proposedPrice ?? selectedOffer.price ?? 0).toFixed(2)} €</Text>
+                  <Text style={styles.offerSummaryPrice}>{formatEur(selectedOffer.proposedPrice ?? selectedOffer.price ?? 0)}</Text>
                 </View>
                 <Text style={styles.offerSummaryMsg} numberOfLines={4}>
                   {selectedOffer.scopeOfWork ?? selectedOffer.message ?? ''}
@@ -285,7 +286,7 @@ function OfferCard({
             </Text>
           </View>
         </View>
-        <Text style={offerStyles.price}>{(offer.proposedPrice ?? offer.price ?? 0).toFixed(2)} €</Text>
+        <Text style={offerStyles.price}>{formatEur(offer.proposedPrice ?? offer.price ?? 0)}</Text>
       </View>
 
       <Text style={offerStyles.message} numberOfLines={4}>{offer.message}</Text>

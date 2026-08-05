@@ -23,6 +23,7 @@ import { Button } from '../../../src/components/ui/Button'
 import { StarRating } from '../../../src/components/ui/StarRating'
 import { getApiErrorMessage } from '../../../src/api/client'
 import { colors, spacing, fontSize, fontWeight, radius } from '../../../src/constants/theme'
+import { formatEur } from '../../../src/utils/currency'
 import { formatDate } from '../../../src/utils/date'
 
 const STATUS_LABEL: Record<string, string> = {
@@ -124,9 +125,9 @@ export default function ProviderOrderDetailScreen() {
         {/* Earnings */}
         <Card style={[styles.card, styles.earningsCard]}>
           <Text style={styles.earningsLabel}>Deine Auszahlung</Text>
-          <Text style={styles.earningsAmount}>{(order.providerAmount ?? 0).toFixed(2)} €</Text>
+          <Text style={styles.earningsAmount}>{formatEur(order.providerAmount ?? 0)}</Text>
           <Text style={styles.earningsNote}>
-            (nach Plattformgebühr {(order.platformFee ?? 0).toFixed(2)} €)
+            (nach Plattformgebühr {formatEur(order.platformFee ?? 0)})
           </Text>
         </Card>
 
@@ -203,10 +204,10 @@ export default function ProviderOrderDetailScreen() {
         {/* Amounts breakdown */}
         <Card style={styles.card}>
           <Text style={styles.sectionLabel}>Zahlungsdetails</Text>
-          <AmountRow label="Angebotspreis" value={`${(order.totalAmount ?? 0).toFixed(2)} €`} />
-          <AmountRow label="Plattformgebühr" value={`- ${(order.platformFee ?? 0).toFixed(2)} €`} />
+          <AmountRow label="Angebotspreis" value={formatEur(order.totalAmount ?? 0)} />
+          <AmountRow label="Plattformgebühr" value={`- ${formatEur(order.platformFee ?? 0)}`} />
           <View style={styles.divider} />
-          <AmountRow label="Netto-Auszahlung" value={`${(order.providerAmount ?? 0).toFixed(2)} €`} bold />
+          <AmountRow label="Netto-Auszahlung" value={formatEur(order.providerAmount ?? 0)} bold />
         </Card>
       </ScrollView>
 

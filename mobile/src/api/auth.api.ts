@@ -1,4 +1,5 @@
 import { apiClient } from './client'
+import { getDeviceId } from '../utils/device'
 import type { User, UserRole } from './types'
 
 export interface RegisterPayload {
@@ -25,13 +26,18 @@ export interface AuthResponse {
   user: User
 }
 
+export interface DeviceChallengeResponse {
+  deviceChallengeRequired: true
+  challengeToken: string
+}
+
 export interface MessageResponse {
   message: string
 }
 
 export const authApi = {
-  register: (payload: RegisterPayload) =>
-    apiClient.post<MessageResponse>('/api/auth/register', payload),
+  register: async (payload: RegisterPayload) =>
+    apiClient.post<MessageResponse>('/api/auth/register', { ...payload, deviceId: await getDeviceId() }),
 
   verifyEmail: (payload: OtpVerifyPayload) =>
     apiClient.post<MessageResponse>('/api/auth/verify/email', payload),
@@ -39,8 +45,14 @@ export const authApi = {
   verifyPhone: (payload: OtpVerifyPayload) =>
     apiClient.post<AuthResponse>('/api/auth/verify/phone', payload),
 
-  login: (payload: LoginPayload) =>
-    apiClient.post<AuthResponse>('/api/auth/login', payload),
+  login: async (payload: LoginPayload) =>
+    apiClient.post<AuthResponse | DeviceChallengeResponse>('/api/auth/login', {
+      ...payload,
+      deviceId: await getDeviceId(),
+    }),
+
+  deviceChallenge: async (payload: { challengeToken: string; code: string; trustDevice?: boolean }) =>
+    apiClient.post<AuthResponse>('/api/auth/device-challenge', payload),
 
   logout: () =>
     apiClient.post<MessageResponse>('/api/auth/logout'),
