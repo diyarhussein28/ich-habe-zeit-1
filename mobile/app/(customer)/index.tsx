@@ -14,16 +14,36 @@ import { useQuery } from '@tanstack/react-query'
 import { useRouter } from 'expo-router'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { categoriesApi } from '../../src/api/categories.api'
-import { ordersApi } from '../../src/api/orders.api'
+import { requestsApi } from '../../src/api/requests.api'
 import { Card } from '../../src/components/ui/Card'
 import { Badge } from '../../src/components/ui/Badge'
 import { Button } from '../../src/components/ui/Button'
 import { useAuthStore } from '../../src/store/auth.store'
 import { colors, spacing, fontSize, fontWeight, radius } from '../../src/constants/theme'
-import type { ServiceCategory, Order } from '../../src/api/types'
+import type { ServiceCategory, ServiceRequest } from '../../src/api/types'
 import { formatDate } from '../../src/utils/date'
 import { formatEur } from '../../src/utils/currency'
 import { isActiveOrderStatus } from '../../src/constants/orderStatus'
+
+const STATUS_LABEL: Record<string, string> = {
+  OPEN: 'Offen',
+  OFFER_RECEIVED: 'Angebote erhalten',
+  AWAITING_PAYMENT: 'Zahlung ausstehend',
+  IN_PROGRESS: 'In Bearbeitung',
+  COMPLETED_BY_PROVIDER: 'Abgeschlossen',
+  AWAITING_RELEASE: 'Freigabe ausstehend',
+  DISPUTED: 'Streitfall',
+}
+
+const STATUS_COLOR: Record<string, 'primary' | 'success' | 'warning' | 'error' | 'neutral'> = {
+  OPEN: 'primary',
+  OFFER_RECEIVED: 'warning',
+  AWAITING_PAYMENT: 'warning',
+  IN_PROGRESS: 'primary',
+  COMPLETED_BY_PROVIDER: 'success',
+  AWAITING_RELEASE: 'warning',
+  DISPUTED: 'error',
+}
 
 export default function CustomerHomeScreen() {
   const router = useRouter()
@@ -36,12 +56,9 @@ export default function CustomerHomeScreen() {
     queryFn: () => categoriesApi.list().then((r) => r.data.categories),
   })
 
-  const { data: recentOrdersData, isLoading: activeOrdersLoading } = useQuery({
-    queryKey: ['customer-orders-recent'],
-    queryFn: () => ordersApi.list({ limit: 20, perspective: 'customer' }).then((r) => {
-      const raw = r.data as unknown as { orders?: Order[] }
-      return raw.orders ?? []
-    }),
+  const { data: myRequests, isLoading: activeOrdersLoading } = useQuery({
+    queryKey: ['my-requests'],
+    queryFn: () => requestsApi.list({ limit: 20 }).then((r) => r.data.items),
     enabled: !!user,
   })
 
@@ -49,7 +66,10 @@ export default function CustomerHomeScreen() {
     c.name.toLowerCase().includes(search.toLowerCase()),
   )
 
-  const activeOrders = (recentOrdersData ?? []).filter((o) => isActiveOrderStatus(o.status)).slice(0, 3)
+  // Active = still waiting for/reviewing offers, or an accepted offer that's
+  // now an order in progress — everything except drafts, history, and
+  // cancelled/expired requests.
+  const activeOrders = (myRequests ?? []).filter((r) => isActiveOrderStatus(r.status)).slice(0, 3)
 
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
@@ -81,7 +101,7 @@ export default function CustomerHomeScreen() {
         <View style={styles.section}>
           <View style={styles.sectionRow}>
             <Text style={styles.sectionTitle}>Aktive Aufträge</Text>
-            <TouchableOpacity onPress={() => router.push('/(customer)/orders')}>
+            <TouchableOpacity onPress={() => router.push('/(customer)/requests')}>
               <Text style={styles.seeAll}>Alle anzeigen →</Text>
             </TouchableOpacity>
           </View>
@@ -96,19 +116,11 @@ export default function CustomerHomeScreen() {
               </Text>
             </View>
           ) : (
-            activeOrders.map((order) => (
-              <RecentOrderCard
-                key={order.id}
-                order={order}
-                onRepeat={() =>
-                  router.push({
-                    pathname: '/requests/create',
-                    params: order.request?.categoryId
-                      ? { categoryId: order.request.categoryId }
-                      : {},
-                  })
-                }
-                onView={() => router.push(`/(customer)/orders/${order.id}`)}
+            activeOrders.map((request) => (
+              <ActiveRequestCard
+                key={request.id}
+                request={request}
+                onView={() => router.push(`/(customer)/requests/${request.id}`)}
               />
             ))
           )}
@@ -158,39 +170,29 @@ export default function CustomerHomeScreen() {
   )
 }
 
-function RecentOrderCard({
-  order,
-  onRepeat,
+function ActiveRequestCard({
+  request,
   onView,
 }: {
-  order: Order
-  onRepeat: () => void
+  request: ServiceRequest
   onView: () => void
 }) {
-  const title = (order as unknown as { request?: { title?: string } }).request?.title ?? 'Buchung'
-  const amount = formatEur(order.grossAmount ?? order.totalAmount ?? 0)
-  const STATUS_LABEL: Record<string, string> = {
-    AWAITING_PAYMENT: 'Zahlung ausstehend',
-    IN_PROGRESS: 'In Bearbeitung',
-    AWAITING_RELEASE: 'Freigabe ausstehend',
-    COMPLETED_BY_PROVIDER: 'Abgeschlossen',
-    RELEASED: 'Abgerechnet',
-    CANCELLED: 'Abgebrochen',
-  }
+  const budget = request.budgetMax ?? request.budget
+  const offerCount = request._count?.offers ?? 0
   return (
-    <Card style={styles.recentCard}>
-      <TouchableOpacity onPress={onView} activeOpacity={0.8}>
-        <Text style={styles.recentTitle} numberOfLines={1}>{title}</Text>
+    <TouchableOpacity onPress={onView} activeOpacity={0.85}>
+      <Card style={styles.recentCard}>
+        <Text style={styles.recentTitle} numberOfLines={1}>{request.title}</Text>
         <View style={styles.recentRow}>
-          <Text style={styles.recentAmount}>{amount}</Text>
-          <Text style={styles.recentStatus}>{STATUS_LABEL[order.status] ?? order.status}</Text>
+          {budget ? <Text style={styles.recentAmount}>{formatEur(budget)}</Text> : <View />}
+          <Badge label={STATUS_LABEL[request.status] ?? request.status} color={STATUS_COLOR[request.status] ?? 'neutral'} />
         </View>
-        <Text style={styles.recentDate}>{formatDate(order.createdAt)}</Text>
-      </TouchableOpacity>
-      <TouchableOpacity onPress={onRepeat} style={styles.repeatBtn}>
-        <Text style={styles.repeatBtnText}>↩ Wiederholen</Text>
-      </TouchableOpacity>
-    </Card>
+        <Text style={styles.recentDate}>
+          {formatDate(request.createdAt)}
+          {offerCount > 0 ? ` · ${offerCount} Angebot${offerCount !== 1 ? 'e' : ''}` : ''}
+        </Text>
+      </Card>
+    </TouchableOpacity>
   )
 }
 
@@ -264,9 +266,7 @@ const styles = StyleSheet.create({
   recentRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 2 },
   recentAmount: { fontSize: fontSize.sm, fontWeight: fontWeight.bold, color: colors.text },
   recentStatus: { fontSize: fontSize.xs, color: colors.textSecondary },
-  recentDate: { fontSize: fontSize.xs, color: colors.textDisabled, marginBottom: spacing.sm },
-  repeatBtn: { borderTopWidth: 1, borderTopColor: colors.border, paddingTop: spacing.sm, alignItems: 'center' },
-  repeatBtnText: { fontSize: fontSize.sm, color: colors.primary, fontWeight: fontWeight.medium },
+  recentDate: { fontSize: fontSize.xs, color: colors.textDisabled },
   catCard: {
     width: '47%',
     backgroundColor: colors.surface,
@@ -301,6 +301,6 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border,
   },
   activeEmptyEmoji: { fontSize: 36, marginBottom: spacing.sm },
-  activeEmptyTitle: { fontSize: fontSize.md, fontWeight: fontWeight.bold, color: colors.text, marginBottom: spacing.xs },
+  activeEmptyTitle: { fontSize: fontSize.md, fontWeight: fontWeight.bold, color: colors.text, marginBottom: spacing.xs, textAlign: 'center' },
   activeEmptyText: { fontSize: fontSize.sm, color: colors.textSecondary, textAlign: 'center', lineHeight: 20 },
 })

@@ -1,5 +1,5 @@
 import { apiClient } from './client'
-import type { ServiceRequest, Offer, PaginatedResponse } from './types'
+import type { ServiceRequest, Offer } from './types'
 
 export interface CreateRequestPayload {
   categoryId: string
@@ -28,7 +28,7 @@ export interface ListRequestsParams {
 
 export const requestsApi = {
   list: (params?: ListRequestsParams) =>
-    apiClient.get<PaginatedResponse<ServiceRequest>>('/api/requests', { params }),
+    apiClient.get<{ total: number; items: ServiceRequest[] }>('/api/requests', { params }),
 
   providerFeed: (params?: { page?: number; limit?: number }) =>
     apiClient.get<{ total: number; items: ServiceRequest[] }>('/api/requests', { params: { ...params, feed: true } }),

@@ -51,10 +51,10 @@ export default function MyRequestsScreen() {
   const router = useRouter()
   const { data, isLoading, refetch } = useQuery({
     queryKey: ['my-requests'],
-    queryFn: () => requestsApi.list({ limit: 50 }).then((r) => r.data),
+    queryFn: () => requestsApi.list({ limit: 50 }).then((r) => r.data.items),
   })
 
-  const requests = (data as unknown as { items?: ServiceRequest[] })?.items ?? []
+  const requests = data ?? []
 
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>

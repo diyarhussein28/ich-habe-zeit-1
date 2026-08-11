@@ -345,7 +345,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border,
   },
   activeEmptyEmoji: { fontSize: 32, marginBottom: spacing.sm },
-  activeEmptyTitle: { fontSize: fontSize.sm, fontWeight: fontWeight.bold, color: colors.text, marginBottom: spacing.xs },
+  activeEmptyTitle: { fontSize: fontSize.sm, fontWeight: fontWeight.bold, color: colors.text, marginBottom: spacing.xs, textAlign: 'center' },
   activeEmptyText: { fontSize: fontSize.xs, color: colors.textSecondary, textAlign: 'center', lineHeight: 18 },
   card: { marginBottom: spacing.md },
   cardTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: spacing.xs },
@@ -371,7 +371,7 @@ const styles = StyleSheet.create({
   offeredBadgeText: { fontSize: fontSize.xs, color: '#15803d', fontWeight: fontWeight.semibold },
   empty: { alignItems: 'center', paddingTop: spacing.xxl, paddingHorizontal: spacing.xl },
   emptyEmoji: { fontSize: 56, marginBottom: spacing.md },
-  emptyTitle: { fontSize: fontSize.lg, fontWeight: fontWeight.bold, color: colors.text, marginBottom: spacing.sm },
+  emptyTitle: { fontSize: fontSize.lg, fontWeight: fontWeight.bold, color: colors.text, marginBottom: spacing.sm, textAlign: 'center' },
   emptyText: { fontSize: fontSize.md, color: colors.textSecondary, textAlign: 'center', lineHeight: 22 },
   // Modal
   modalOverlay: { flex: 1, justifyContent: 'flex-end', backgroundColor: colors.overlay },

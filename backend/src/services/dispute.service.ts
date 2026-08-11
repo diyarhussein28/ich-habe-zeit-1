@@ -267,7 +267,12 @@ export async function resolveDispute(data: {
         await tx.orderStatusHistory.create({
           data: { orderId: order.id, status: 'IN_PROGRESS', triggeredBy: data.resolvedByUserId },
         })
+        // Keep the request's status in sync with the order — otherwise it stays
+        // stuck showing "Streitfall" forever even though the order moved on.
+        await tx.serviceRequest.update({ where: { id: order.requestId }, data: { status: 'IN_PROGRESS' } })
       }
+      // ESCALATED intentionally leaves both order and request at DISPUTED —
+      // it's not resolved yet, just handed to external mediation.
 
       await tx.auditLog.create({
         data: {
@@ -359,6 +364,10 @@ export async function resolveDispute(data: {
     await tx.orderStatusHistory.create({
       data: { orderId: order.id, status: newOrderStatus, triggeredBy: data.resolvedByUserId },
     })
+
+    // Keep the request's status in sync with the order — otherwise it stays
+    // stuck showing "Streitfall" forever even though the order was resolved.
+    await tx.serviceRequest.update({ where: { id: order.requestId }, data: { status: newOrderStatus } })
 
     await tx.auditLog.create({
       data: {

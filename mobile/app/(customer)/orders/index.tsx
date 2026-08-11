@@ -155,6 +155,6 @@ const styles = StyleSheet.create({
   metaItem: { fontSize: fontSize.xs, color: colors.textSecondary },
   empty: { alignItems: 'center', paddingTop: spacing.xxl, paddingHorizontal: spacing.xl },
   emptyEmoji: { fontSize: 56, marginBottom: spacing.md },
-  emptyTitle: { fontSize: fontSize.lg, fontWeight: fontWeight.bold, color: colors.text, marginBottom: spacing.sm },
+  emptyTitle: { fontSize: fontSize.lg, fontWeight: fontWeight.bold, color: colors.text, marginBottom: spacing.sm, textAlign: 'center' },
   emptyText: { fontSize: fontSize.md, color: colors.textSecondary, textAlign: 'center', lineHeight: 22 },
 })

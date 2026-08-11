@@ -216,7 +216,7 @@ const styles = StyleSheet.create({
   completeBtn: { flex: 1 },
   empty: { alignItems: 'center', paddingTop: spacing.xxl, paddingHorizontal: spacing.xl },
   emptyEmoji: { fontSize: 56, marginBottom: spacing.md },
-  emptyTitle: { fontSize: fontSize.lg, fontWeight: fontWeight.bold, color: colors.text, marginBottom: spacing.sm },
+  emptyTitle: { fontSize: fontSize.lg, fontWeight: fontWeight.bold, color: colors.text, marginBottom: spacing.sm, textAlign: 'center' },
   emptyText: { fontSize: fontSize.md, color: colors.textSecondary, textAlign: 'center' },
   confirmBanner: {
     margin: spacing.lg, padding: spacing.md, borderRadius: 10,
