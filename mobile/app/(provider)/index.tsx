@@ -21,6 +21,8 @@ import { Card } from '../../src/components/ui/Card'
 import { Badge } from '../../src/components/ui/Badge'
 import { Button } from '../../src/components/ui/Button'
 import { Input } from '../../src/components/ui/Input'
+import { NotificationBell } from '../../src/components/ui/NotificationBell'
+import { StarRating } from '../../src/components/ui/StarRating'
 import { useAuthStore } from '../../src/store/auth.store'
 import { getApiErrorMessage } from '../../src/api/client'
 import { colors, spacing, fontSize, fontWeight, radius } from '../../src/constants/theme'
@@ -85,6 +87,7 @@ export default function ProviderFeedScreen() {
         <Text style={styles.greeting} numberOfLines={1}>Hallo, {user?.displayName} 👋</Text>
         <Text style={styles.sub}>Willkommen zurück</Text>
         <View style={styles.headerActions}>
+          <NotificationBell />
           <TouchableOpacity onPress={() => router.push('/(provider)/listings')} style={styles.myRequestsBtn}>
             <Text style={styles.myRequestsBtnText} numberOfLines={1}>Inserate</Text>
           </TouchableOpacity>
@@ -158,6 +161,9 @@ export default function ProviderFeedScreen() {
                 params: { requestId: item.id, title: item.title },
               })
             }
+            onCustomerPress={() => {
+              if (item.customer?.id) router.push(`/customers/${item.customer.id}`)
+            }}
           />
         )}
       />
@@ -238,12 +244,15 @@ function FeedCard({
   request,
   onOffer,
   onChat,
+  onCustomerPress,
 }: {
   request: ServiceRequest & { myOffer?: { id: string; status: string; proposedPrice: number } | null }
   onOffer: () => void
   onChat: () => void
+  onCustomerPress: () => void
 }) {
   const alreadyOffered = !!request.myOffer
+  const customerName = request.customer?.user?.displayName
   return (
     <Card style={styles.card}>
       <View style={styles.cardTop}>
@@ -255,6 +264,15 @@ function FeedCard({
           <Text style={styles.budget}>bis {(request.budgetMin ?? request.budget)!.toFixed(0)} €</Text>
         ) : null}
       </View>
+      {customerName ? (
+        <TouchableOpacity onPress={onCustomerPress} style={styles.customerRow} activeOpacity={0.7}>
+          <Text style={styles.customerName}>{customerName}</Text>
+          <StarRating value={request.customer?.averageRating ?? 0} size={12} />
+          <Text style={styles.customerRatingCount}>
+            ({request.customer?.totalReviews ?? 0})
+          </Text>
+        </TouchableOpacity>
+      ) : null}
       <Text style={styles.cardTitle} numberOfLines={2}>{request.title}</Text>
       <Text style={styles.cardDesc} numberOfLines={3}>{request.description}</Text>
       <View style={styles.cardFooter}>
@@ -353,6 +371,9 @@ const styles = StyleSheet.create({
   category: { fontSize: fontSize.xs, color: colors.primary, fontWeight: fontWeight.semibold, textTransform: 'uppercase', letterSpacing: 0.5 },
   location: { fontSize: fontSize.xs, color: colors.textSecondary, marginTop: 2 },
   budget: { fontSize: fontSize.sm, fontWeight: fontWeight.bold, color: colors.secondary },
+  customerRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs, marginBottom: spacing.xs },
+  customerName: { fontSize: fontSize.xs, fontWeight: fontWeight.semibold, color: colors.text },
+  customerRatingCount: { fontSize: fontSize.xs, color: colors.textSecondary },
   cardTitle: { fontSize: fontSize.md, fontWeight: fontWeight.bold, color: colors.text, marginBottom: spacing.xs, lineHeight: 22 },
   cardDesc: { fontSize: fontSize.sm, color: colors.textSecondary, lineHeight: 20, marginBottom: spacing.md },
   cardFooter: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },

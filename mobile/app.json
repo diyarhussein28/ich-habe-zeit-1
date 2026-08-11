@@ -52,6 +52,12 @@
         "projectId": "32bf1253-53f6-48b0-93ea-eb28ebe6cb8b"
       }
     },
-    "owner": "diyar29"
+    "owner": "diyar29",
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/32bf1253-53f6-48b0-93ea-eb28ebe6cb8b"
+    }
   }
 }

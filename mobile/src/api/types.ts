@@ -64,7 +64,12 @@ export interface ServiceCategory {
 export interface ServiceRequest {
   id: string
   customerId: string
-  customer?: Partial<User>
+  customer?: {
+    id: string
+    averageRating: number
+    totalReviews: number
+    user: Partial<User>
+  }
   categoryId: string
   category?: ServiceCategory
   title: string

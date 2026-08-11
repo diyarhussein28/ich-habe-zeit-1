@@ -45,4 +45,49 @@ export async function notificationsRoutes(app: FastifyInstance) {
 
     return reply.send({ unregistered: true })
   })
+
+  // GET /api/notifications — in-app inbox, newest first
+  app.get('/', { preHandler: requireAuth }, async (request, reply) => {
+    const query = z
+      .object({ limit: z.coerce.number().min(1).max(100).default(50), offset: z.coerce.number().min(0).default(0) })
+      .parse(request.query)
+
+    const [notifications, unreadCount] = await Promise.all([
+      prisma.notification.findMany({
+        where: { userId: request.userId },
+        orderBy: { createdAt: 'desc' },
+        take: query.limit,
+        skip: query.offset,
+      }),
+      prisma.notification.count({ where: { userId: request.userId, readAt: null } }),
+    ])
+
+    return reply.send({ notifications, unreadCount })
+  })
+
+  // GET /api/notifications/unread-count — lightweight, for a badge
+  app.get('/unread-count', { preHandler: requireAuth }, async (request, reply) => {
+    const unreadCount = await prisma.notification.count({ where: { userId: request.userId, readAt: null } })
+    return reply.send({ unreadCount })
+  })
+
+  // PATCH /api/notifications/:id/read
+  app.patch('/:id/read', { preHandler: requireAuth }, async (request, reply) => {
+    const { id } = request.params as { id: string }
+    const result = await prisma.notification.updateMany({
+      where: { id, userId: request.userId },
+      data: { readAt: new Date() },
+    })
+    if (result.count === 0) return reply.status(404).send({ error: 'NOT_FOUND' })
+    return reply.send({ read: true })
+  })
+
+  // POST /api/notifications/read-all
+  app.post('/read-all', { preHandler: requireAuth }, async (request, reply) => {
+    await prisma.notification.updateMany({
+      where: { userId: request.userId, readAt: null },
+      data: { readAt: new Date() },
+    })
+    return reply.send({ read: true })
+  })
 }

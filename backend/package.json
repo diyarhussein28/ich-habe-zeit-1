@@ -5,6 +5,7 @@
   "main": "dist/index.js",
   "scripts": {
     "dev": "tsx watch src/index.ts",
+    "postinstall": "prisma generate",
     "build": "tsc",
     "start": "node dist/index.js",
     "db:generate": "prisma generate",
@@ -17,6 +18,9 @@
   "author": "",
   "license": "ISC",
   "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
   "dependencies": {
     "@fastify/cors": "^11.3.0",
     "@fastify/helmet": "^13.1.0",

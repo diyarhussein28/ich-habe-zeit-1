@@ -83,6 +83,25 @@ export async function submitRating(data: {
           averageRating: Math.round(averageRating * 100) / 100,
         },
       })
+    } else {
+      // Recompute customer aggregate stats when a provider rates them
+      const allRatings = await tx.rating.findMany({
+        where: { customerReceiverId: customerProfile.id },
+        select: { score: true },
+      })
+      const totalReviews = allRatings.length
+      const averageRating =
+        totalReviews > 0
+          ? allRatings.reduce((sum, r) => sum + r.score, 0) / totalReviews
+          : 0
+
+      await tx.customerProfile.update({
+        where: { id: customerProfile.id },
+        data: {
+          totalReviews,
+          averageRating: Math.round(averageRating * 100) / 100,
+        },
+      })
     }
 
     return rating

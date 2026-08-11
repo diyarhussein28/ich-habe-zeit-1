@@ -11,6 +11,7 @@ export type PushType =
   | 'RELEASE_REMINDER'
   | 'APPOINTMENT_REMINDER'
   | 'NEW_MESSAGE'
+  | 'NEW_REQUEST_MESSAGE'
   | 'DISPUTE_OPENED'
   | 'DISPUTE_UPDATE'
   | 'INVOICE_ISSUED'
@@ -23,6 +24,7 @@ export interface PushData {
   type: PushType
   orderId?: string
   requestId?: string
+  providerId?: string
   messageId?: string
 }
 

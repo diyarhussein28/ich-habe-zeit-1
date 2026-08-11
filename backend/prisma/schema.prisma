@@ -185,6 +185,7 @@ model User {
   notificationSettings NotificationSettings?
   kycDocuments         KycDocument[]
   pushTokens           PushToken[]
+  notifications        Notification[]
 
   @@index([email])
   @@index([phone])
@@ -196,6 +197,9 @@ model CustomerProfile {
   id             String   @id @default(uuid())
   userId         String   @unique
   user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  averageRating  Float    @default(0)
+  totalReviews   Int      @default(0)
 
   // Relations
   requests       ServiceRequest[]
@@ -706,6 +710,27 @@ model PushToken {
   updatedAt DateTime @updatedAt
 
   @@index([userId])
+}
+
+// In-app notification inbox — persisted independent of whether push/email
+// actually got delivered (push in particular is best-effort and silently
+// no-ops without an EAS project configured), so there's always a reliable
+// record of "what happened while I wasn't looking".
+model Notification {
+  id         String    @id @default(uuid())
+  userId     String
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type       String    // matches PushType, e.g. "NEW_OFFER", "DISPUTE_UPDATE"
+  title      String
+  body       String    @db.Text
+  orderId    String?
+  requestId  String?
+  providerId String?   // disambiguates which pre-offer chat thread on a request
+  readAt     DateTime?
+  createdAt  DateTime  @default(now())
+
+  @@index([userId, createdAt])
+  @@index([userId, readAt])
 }
 
 // ─── Notifications & Sessions ─────────────────────────────────────────────────

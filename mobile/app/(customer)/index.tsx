@@ -18,6 +18,7 @@ import { requestsApi } from '../../src/api/requests.api'
 import { Card } from '../../src/components/ui/Card'
 import { Badge } from '../../src/components/ui/Badge'
 import { Button } from '../../src/components/ui/Button'
+import { NotificationBell } from '../../src/components/ui/NotificationBell'
 import { useAuthStore } from '../../src/store/auth.store'
 import { colors, spacing, fontSize, fontWeight, radius } from '../../src/constants/theme'
 import type { ServiceCategory, ServiceRequest } from '../../src/api/types'
@@ -75,13 +76,16 @@ export default function CustomerHomeScreen() {
     <SafeAreaView style={styles.safe} edges={['top']}>
       {/* Header */}
       <View style={styles.header}>
-        <View>
-          <Text style={styles.greeting}>Hallo, {user?.displayName} 👋</Text>
+        <View style={styles.greetingBlock}>
+          <Text style={styles.greeting} numberOfLines={1}>Hallo, {user?.displayName} 👋</Text>
           <Text style={styles.subgreeting}>Was suchst du heute?</Text>
         </View>
-        <TouchableOpacity onPress={() => router.push('/requests/create')} style={styles.postBtn}>
-          <Text style={styles.postBtnText}>+ Auftrag</Text>
-        </TouchableOpacity>
+        <View style={styles.headerActions}>
+          <NotificationBell />
+          <TouchableOpacity onPress={() => router.push('/requests/create')} style={styles.postBtn}>
+            <Text style={styles.postBtnText} numberOfLines={1}>+ Auftrag</Text>
+          </TouchableOpacity>
+        </View>
       </View>
 
       {/* Search */}
@@ -229,8 +233,10 @@ const styles = StyleSheet.create({
     paddingTop: spacing.md,
     paddingBottom: spacing.sm,
   },
+  greetingBlock: { flex: 1, marginRight: spacing.sm },
   greeting: { fontSize: fontSize.xl, fontWeight: fontWeight.bold, color: colors.text },
   subgreeting: { fontSize: fontSize.sm, color: colors.textSecondary, marginTop: 2 },
+  headerActions: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, flexShrink: 0 },
   postBtn: {
     backgroundColor: colors.primary,
     paddingHorizontal: spacing.md,

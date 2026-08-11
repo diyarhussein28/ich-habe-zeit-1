@@ -86,6 +86,8 @@ export interface NotifyEventOptions {
   smsBody?: string
   orderId?: string
   requestId?: string
+  /** Disambiguates which pre-offer chat thread on a request (multiple providers can each have one). */
+  providerId?: string
   category?: NotificationCategory
   /** Skip the email channel entirely regardless of emailEnabled (e.g. chat messages, which are push-only). */
   skipEmail?: boolean
@@ -128,8 +130,23 @@ export async function notifyEvent(opts: NotifyEventOptions): Promise<void> {
   ])
   if (!user) return
 
+  // Always persist to the in-app inbox, independent of push/email channel
+  // preferences — those toggles control external delivery, not whether the
+  // event shows up when the user opens the app themselves.
+  prisma.notification.create({
+    data: {
+      userId: opts.userId,
+      type: opts.pushType,
+      title: opts.title,
+      body: opts.body,
+      orderId: opts.orderId,
+      requestId: opts.requestId,
+      providerId: opts.providerId,
+    },
+  }).catch(() => {})
+
   if (isPushAllowed(opts.category, settings)) {
-    sendPushToUser(opts.userId, { type: opts.pushType, orderId: opts.orderId, requestId: opts.requestId }, opts.title, opts.body).catch(() => {})
+    sendPushToUser(opts.userId, { type: opts.pushType, orderId: opts.orderId, requestId: opts.requestId, providerId: opts.providerId }, opts.title, opts.body).catch(() => {})
   }
   if (!opts.skipEmail && isEmailAllowed(opts.category, settings)) {
     sendEmail(user.email, `${opts.title} — Ich habe Zeit`, emailWrapper(opts.title, opts.emailHtml ?? `<p>${opts.body}</p>`)).catch(() => {})

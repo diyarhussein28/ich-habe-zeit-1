@@ -6,13 +6,22 @@
   "build": {
     "development": {
       "developmentClient": true,
-      "distribution": "internal"
+      "distribution": "internal",
+      "channel": "development",
+      "android": { "buildType": "apk" }
     },
     "preview": {
-      "distribution": "internal"
+      "distribution": "internal",
+      "channel": "preview",
+      "android": { "buildType": "apk" },
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://REPLACE_WITH_RAILWAY_URL",
+        "EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY": "pk_test_51TzIkJDcLJlc15lfEo1jqWkXokwuCKhXCt5YKIT1H95q3uTyxaxxw9nXDnh5FCurMRXE4MEv2W8PkjzYk8Bb8yVA00erVDiJqm"
+      }
     },
     "production": {
-      "autoIncrement": true
+      "autoIncrement": true,
+      "channel": "production"
     }
   },
   "submit": {

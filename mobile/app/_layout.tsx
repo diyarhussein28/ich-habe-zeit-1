@@ -40,8 +40,10 @@ function RootLayoutInner() {
       <Stack.Screen name="become-provider" options={{ presentation: 'modal' }} />
       <Stack.Screen name="disputes/[orderId]" />
       <Stack.Screen name="providers/[id]" />
+      <Stack.Screen name="customers/[id]" />
       <Stack.Screen name="chat/request/[requestId]" />
       <Stack.Screen name="invoice-preview" options={{ presentation: 'modal' }} />
+      <Stack.Screen name="notifications/index" />
       <Stack.Screen name="chat" />
       <Stack.Screen name="support" />
       <Stack.Screen name="addresses" />

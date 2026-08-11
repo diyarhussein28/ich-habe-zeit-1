@@ -421,6 +421,7 @@ function OfferCard({
   onReject: () => void
   onCounter: () => void
 }) {
+  const router = useRouter()
   const provider = offer.provider
   const name = provider?.user?.displayName ?? 'Dienstleister'
   const initials = name
@@ -432,7 +433,12 @@ function OfferCard({
 
   return (
     <Card style={offerStyles.card}>
-      <View style={offerStyles.top}>
+      <TouchableOpacity
+        style={offerStyles.top}
+        activeOpacity={provider?.id ? 0.7 : 1}
+        disabled={!provider?.id}
+        onPress={() => provider?.id && router.push(`/providers/${provider.id}`)}
+      >
         <View style={offerStyles.avatar}>
           <Text style={offerStyles.avatarText}>{initials || '?'}</Text>
         </View>
@@ -446,7 +452,7 @@ function OfferCard({
           </View>
         </View>
         <Text style={offerStyles.price}>{formatEur(offer.proposedPrice ?? offer.price ?? 0)}</Text>
-      </View>
+      </TouchableOpacity>
 
       <Text style={offerStyles.message} numberOfLines={4}>{offer.message}</Text>
 

@@ -1,4 +1,5 @@
 import { prisma } from '../config/prisma.js'
+import { notifyEvent } from './notification.service.js'
 
 const CONTACT_REGEX = /(\+\d{7,15}|@\S+\.\S+|\d{10,11}|[\w.]+@[\w.]+\.\w+)/i
 
@@ -165,7 +166,7 @@ export async function sendRequestMessage(
   senderId: string,
   content: string
 ) {
-  await authorizeRequestChat(requestId, providerId, senderId)
+  const { request, provider, isCustomer } = await authorizeRequestChat(requestId, providerId, senderId)
   enforceRateLimit(senderId)
 
   if (CONTACT_REGEX.test(content)) {
@@ -185,10 +186,24 @@ export async function sendRequestMessage(
   })
   if (!chat) chat = await prisma.chat.create({ data: { requestId, providerId } })
 
-  return prisma.chatMessage.create({
+  const message = await prisma.chatMessage.create({
     data: { chatId: chat.id, senderId, content },
     include: { attachments: true },
   })
+
+  const recipientId = isCustomer ? provider.userId : request.customer.userId
+  notifyEvent({
+    userId: recipientId,
+    pushType: 'NEW_REQUEST_MESSAGE',
+    requestId,
+    providerId,
+    title: 'Neue Nachricht',
+    body: content.trim().slice(0, 100),
+    category: 'chatMessage',
+    skipEmail: true,
+  }).catch(() => {})
+
+  return message
 }
 
 export async function getRequestMessages(requestId: string, providerId: string, userId: string, limit = 50) {

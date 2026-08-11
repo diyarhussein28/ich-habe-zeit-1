@@ -5,6 +5,7 @@ import Constants from 'expo-constants'
 import { router } from 'expo-router'
 import { useAuthStore } from '../store/auth.store'
 import { notificationsApi } from '../api/notifications.api'
+import { queryClient } from '../utils/queryClient'
 
 // Show alerts while app is in foreground
 Notifications.setNotificationHandler({
@@ -21,9 +22,10 @@ type NotificationData = {
   type?: string
   orderId?: string
   requestId?: string
+  providerId?: string
 }
 
-function routeForNotification(data: NotificationData, role?: string) {
+export function routeForNotification(data: NotificationData, role?: string) {
   switch (data.type) {
     case 'NEW_OFFER':
       return data.requestId ? `/(customer)/requests/${data.requestId}` : null
@@ -38,11 +40,13 @@ function routeForNotification(data: NotificationData, role?: string) {
         : `/(customer)/orders/${data.orderId}`
     case 'NEW_MESSAGE':
       return data.orderId ? `/chat/${data.orderId}` : null
+    case 'NEW_REQUEST_MESSAGE':
+      return data.requestId && data.providerId
+        ? `/chat/request/${data.requestId}?providerId=${data.providerId}`
+        : null
+    case 'DISPUTE_OPENED':
     case 'DISPUTE_UPDATE':
-      if (!data.orderId) return null
-      return role === 'PROVIDER'
-        ? `/(provider)/orders/${data.orderId}`
-        : `/(customer)/orders/${data.orderId}`
+      return data.orderId ? `/disputes/${data.orderId}` : null
     case 'KYC_VERIFIED':
     case 'KYC_REJECTED':
     case 'KYC_RESUBMISSION':
@@ -126,9 +130,10 @@ export function usePushNotifications() {
 
   // Notification listeners
   useEffect(() => {
-    // Foreground: badge update only (alert already shown by handler above)
+    // Foreground: alert already shown by handler above — just refresh the inbox/badge
     foregroundSub.current = Notifications.addNotificationReceivedListener(() => {
-      // Could update in-app badge / query invalidation here
+      queryClient.invalidateQueries({ queryKey: ['notifications'] })
+      queryClient.invalidateQueries({ queryKey: ['notifications-unread-count'] })
     })
 
     // Tap: navigate to the relevant screen
