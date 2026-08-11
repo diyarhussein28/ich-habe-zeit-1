@@ -190,7 +190,7 @@ export default function ProviderProfileScreen() {
             <Text style={styles.kycText}>
               Um Zahlungen zu empfangen, musst du deine Identität verifizieren.
             </Text>
-            <Button label="Jetzt verifizieren" onPress={() => router.push('./kyc')} size="sm" style={{ marginTop: spacing.md }} />
+            <Button label="Jetzt verifizieren" onPress={() => router.push('/(provider)/profile/kyc')} size="sm" style={{ marginTop: spacing.md }} />
           </Card>
         )}
 
@@ -268,7 +268,7 @@ export default function ProviderProfileScreen() {
             </View>
           )}
           <Divider />
-          <MenuItem emoji="📄" label="Rechnungen" onPress={() => router.push('./invoices')} />
+          <MenuItem emoji="📄" label="Rechnungen" onPress={() => router.push('/(provider)/profile/invoices')} />
           <Divider />
           <MenuItem emoji="🔔" label="Benachrichtigungen" onPress={() => router.push('/notification-settings')} />
           <Divider />

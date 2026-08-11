@@ -29,51 +29,80 @@ const TYPE_LABEL: Record<string, string> = {
 const eur = (n: number) =>
   n.toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' €'
 
+// Downloads the invoice PDF to a local cache file, reused by both preview
+// and download so the auth/fetch logic lives in exactly one place.
+async function fetchInvoicePdf(invoice: Invoice): Promise<string> {
+  const token = await SecureStore.getItemAsync(TOKEN_KEY)
+  if (!token) throw new Error('NO_TOKEN')
+
+  const url = `${BASE_URL}/api/invoices/${invoice.id}/pdf`
+  const fileUri = `${FileSystem.cacheDirectory}${invoice.invoiceNumber}.pdf`
+
+  const result = await FileSystem.downloadAsync(url, fileUri, {
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  if (result.status !== 200) throw new Error(`HTTP ${result.status}`)
+  return result.uri
+}
+
 export default function InvoicesScreen() {
   const router = useRouter()
   const [downloadingId, setDownloadingId] = useState<string | null>(null)
+  const [previewingId, setPreviewingId] = useState<string | null>(null)
 
   const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ['invoices'],
     queryFn: () => invoicesApi.list().then((r) => r.data.invoices),
   })
 
+  const previewPdf = async (invoice: Invoice) => {
+    if (downloadingId || previewingId) return
+    setPreviewingId(invoice.id)
+    try {
+      const uri = await fetchInvoicePdf(invoice)
+      router.push({ pathname: '/invoice-preview', params: { uri, title: invoice.invoiceNumber } })
+    } catch (err) {
+      if (err instanceof Error && err.message === 'NO_TOKEN') {
+        Alert.alert('Fehler', 'Bitte melde dich erneut an.')
+      } else {
+        Alert.alert('Fehler', 'Die Rechnung konnte nicht geladen werden.')
+      }
+    } finally {
+      setPreviewingId(null)
+    }
+  }
+
   const downloadPdf = async (invoice: Invoice) => {
-    if (downloadingId) return
+    if (downloadingId || previewingId) return
     setDownloadingId(invoice.id)
     try {
-      const token = await SecureStore.getItemAsync(TOKEN_KEY)
-      if (!token) {
-        Alert.alert('Fehler', 'Bitte melde dich erneut an.')
-        return
-      }
+      const uri = await fetchInvoicePdf(invoice)
 
-      const url = `${BASE_URL}/api/invoices/${invoice.id}/pdf`
-      const fileUri = `${FileSystem.cacheDirectory}${invoice.invoiceNumber}.pdf`
-
-      const result = await FileSystem.downloadAsync(url, fileUri, {
-        headers: { Authorization: `Bearer ${token}` },
-      })
-
-      if (result.status !== 200) {
-        throw new Error(`HTTP ${result.status}`)
-      }
+      // The actual loading work (fetching the PDF) is done — reset the spinner
+      // here rather than after the share sheet. expo-sharing's promise isn't
+      // guaranteed to resolve when the user just dismisses the native share
+      // sheet without picking an action, which would otherwise leave the
+      // button stuck spinning indefinitely.
+      setDownloadingId(null)
 
       const canShare = await Sharing.isAvailableAsync()
       if (!canShare) {
-        Alert.alert('Hinweis', `Datei gespeichert unter:\n${result.uri}`)
+        Alert.alert('Hinweis', `Datei gespeichert unter:\n${uri}`)
         return
       }
 
-      await Sharing.shareAsync(result.uri, {
+      await Sharing.shareAsync(uri, {
         mimeType: 'application/pdf',
         dialogTitle: `Rechnung ${invoice.invoiceNumber}`,
         UTI: 'com.adobe.pdf',
-      })
+      }).catch(() => {})
     } catch (err) {
-      Alert.alert('Fehler', 'Die Rechnung konnte nicht heruntergeladen werden.')
-    } finally {
       setDownloadingId(null)
+      if (err instanceof Error && err.message === 'NO_TOKEN') {
+        Alert.alert('Fehler', 'Bitte melde dich erneut an.')
+      } else {
+        Alert.alert('Fehler', 'Die Rechnung konnte nicht heruntergeladen werden.')
+      }
     }
   }
 
@@ -113,7 +142,9 @@ export default function InvoicesScreen() {
             <InvoiceCard
               invoice={item}
               downloading={downloadingId === item.id}
+              previewing={previewingId === item.id}
               onDownload={() => downloadPdf(item)}
+              onPreview={() => previewPdf(item)}
             />
           )}
         />
@@ -125,11 +156,15 @@ export default function InvoicesScreen() {
 function InvoiceCard({
   invoice,
   downloading,
+  previewing,
   onDownload,
+  onPreview,
 }: {
   invoice: Invoice
   downloading: boolean
+  previewing: boolean
   onDownload: () => void
+  onPreview: () => void
 }) {
   const isCommission = invoice.invoiceType === 'COMMISSION_INVOICE'
   return (
@@ -162,18 +197,32 @@ function InvoiceCard({
         <Text style={cardStyles.vatNote}>§ 19 UStG (Kleinunternehmer, keine MwSt.)</Text>
       )}
 
-      <TouchableOpacity
-        onPress={onDownload}
-        disabled={downloading}
-        style={[cardStyles.dlBtn, downloading ? cardStyles.dlBtnDisabled : null]}
-        activeOpacity={0.8}
-      >
-        {downloading ? (
-          <ActivityIndicator size="small" color={colors.textInverse} />
-        ) : (
-          <Text style={cardStyles.dlBtnText}>PDF herunterladen</Text>
-        )}
-      </TouchableOpacity>
+      <View style={cardStyles.actions}>
+        <TouchableOpacity
+          onPress={onPreview}
+          disabled={previewing || downloading}
+          style={[cardStyles.previewBtn, (previewing || downloading) ? cardStyles.btnDisabled : null]}
+          activeOpacity={0.8}
+        >
+          {previewing ? (
+            <ActivityIndicator size="small" color={colors.primary} />
+          ) : (
+            <Text style={cardStyles.previewBtnText}>👁 Vorschau</Text>
+          )}
+        </TouchableOpacity>
+        <TouchableOpacity
+          onPress={onDownload}
+          disabled={downloading || previewing}
+          style={[cardStyles.dlBtn, (downloading || previewing) ? cardStyles.btnDisabled : null]}
+          activeOpacity={0.8}
+        >
+          {downloading ? (
+            <ActivityIndicator size="small" color={colors.textInverse} />
+          ) : (
+            <Text style={cardStyles.dlBtnText}>Herunterladen</Text>
+          )}
+        </TouchableOpacity>
+      </View>
     </View>
   )
 }
@@ -201,14 +250,25 @@ const cardStyles = StyleSheet.create({
   metaValue: { fontSize: fontSize.sm, color: colors.text },
   amount: { fontSize: fontSize.lg, fontWeight: fontWeight.bold, color: colors.text },
   vatNote: { fontSize: fontSize.xs, color: colors.textSecondary, marginBottom: spacing.sm, fontStyle: 'italic' },
+  actions: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.xs },
+  previewBtn: {
+    flex: 1,
+    backgroundColor: colors.background,
+    borderWidth: 1.5,
+    borderColor: colors.primary,
+    borderRadius: radius.md,
+    paddingVertical: spacing.sm + 2,
+    alignItems: 'center',
+  },
+  previewBtnText: { color: colors.primary, fontSize: fontSize.sm, fontWeight: fontWeight.semibold },
   dlBtn: {
+    flex: 1,
     backgroundColor: colors.primary,
     borderRadius: radius.md,
     paddingVertical: spacing.sm + 2,
     alignItems: 'center',
-    marginTop: spacing.xs,
   },
-  dlBtnDisabled: { backgroundColor: colors.textDisabled },
+  btnDisabled: { opacity: 0.5 },
   dlBtnText: { color: colors.textInverse, fontSize: fontSize.sm, fontWeight: fontWeight.semibold },
 })
 
