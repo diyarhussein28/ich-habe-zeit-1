@@ -21,6 +21,22 @@ const markCompleteSchema = z.object({
 const openDisputeSchema = z.object({
   reasonCategory: z.string().min(2),
   description: z.string().min(50).max(2000),
+  intakeAnswers: z
+    .array(z.object({ key: z.string(), question: z.string(), answer: z.string() }))
+    .max(10)
+    .optional(),
+})
+
+const respondDisputeSchema = z.object({
+  agrees: z.boolean(),
+  description: z.string().min(20).max(2000),
+})
+
+const addEvidenceSchema = z.object({
+  fileUrl: z.string().url(),
+  fileName: z.string().min(1).max(255),
+  fileType: z.string().min(1).max(100),
+  fileSizeBytes: z.number().int().positive(),
 })
 
 const resolveDisputeSchema = z.object({
@@ -69,20 +85,18 @@ export async function orderRoutes(app: FastifyInstance) {
 
   // GET /orders — list orders for current user
   app.get('/', { preHandler: requireAuth }, async (request, reply) => {
-    const query = z.object({ status: z.string().optional() }).parse(request.query)
+    const query = z
+      .object({ status: z.string().optional(), perspective: z.enum(['customer', 'provider']).optional() })
+      .parse(request.query)
 
-    if (request.userRole === 'PROVIDER') {
-      // Providers see orders both as service provider AND as requester (when they post requests)
-      const [providerOrders, requesterOrders] = await Promise.all([
-        orderService.listOrdersForProvider(request.userId, query.status as never).catch(() => []),
-        orderService.listOrdersForUser(request.userId, query.status as never),
-      ])
-      const seen = new Set<string>()
-      const orders = [...providerOrders, ...requesterOrders].filter((o) => {
-        if (seen.has(o.id)) return false
-        seen.add(o.id)
-        return true
-      })
+    // Providers can also post their own requests as a customer (e.g. "+ Auftrag"
+    // in der Jobbörse). The caller declares which side of their activity it wants —
+    // defaulting by role would leak provider-fulfilled orders into a screen that's
+    // meant to show only "orders I booked myself", and vice versa.
+    const perspective = query.perspective ?? (request.userRole === 'PROVIDER' ? 'provider' : 'customer')
+
+    if (perspective === 'provider') {
+      const orders = await orderService.listOrdersForProvider(request.userId, query.status as never).catch(() => [])
       return reply.send({ orders })
     }
 
@@ -345,6 +359,60 @@ export async function orderRoutes(app: FastifyInstance) {
     }
   })
 
+  // POST /orders/:id/dispute/respond — the party who didn't open it states their side
+  app.post('/:id/dispute/respond', { preHandler: requireAuth }, async (request, reply) => {
+    const { id } = request.params as { id: string }
+    const body = respondDisputeSchema.safeParse(request.body)
+    if (!body.success) return reply.status(400).send({ error: 'VALIDATION_ERROR', details: body.error.flatten() })
+
+    const order = await prisma.order.findUnique({ where: { id }, select: { dispute: { select: { id: true } } } })
+    if (!order?.dispute) return reply.status(404).send({ error: 'NO_DISPUTE' })
+
+    try {
+      const dispute = await disputeService.respondToDispute({
+        disputeId: order.dispute.id,
+        respondingUserId: request.userId,
+        ...body.data,
+      })
+      return reply.send({ dispute })
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'ERROR'
+      const status = msg === 'FORBIDDEN' ? 403 : msg === 'NOT_FOUND' || msg === 'DISPUTE_NOT_FOUND' ? 404 : 400
+      return reply.status(status).send({ error: msg })
+    }
+  })
+
+  // POST /orders/:id/dispute/evidence — either side attaches a photo/document
+  app.post('/:id/dispute/evidence', { preHandler: requireAuth }, async (request, reply) => {
+    const { id } = request.params as { id: string }
+    const body = addEvidenceSchema.safeParse(request.body)
+    if (!body.success) return reply.status(400).send({ error: 'VALIDATION_ERROR', details: body.error.flatten() })
+
+    const order = await prisma.order.findUnique({
+      where: { id },
+      include: { offer: { include: { provider: true } }, dispute: true },
+    })
+    if (!order?.dispute) return reply.status(404).send({ error: 'NO_DISPUTE' })
+
+    const isCustomer = order.customerId === request.userId
+    const isProvider = order.offer.provider.userId === request.userId
+    if (!isCustomer && !isProvider) return reply.status(403).send({ error: 'FORBIDDEN' })
+
+    try {
+      await disputeService.addEvidence({
+        disputeId: order.dispute.id,
+        uploadedByUserId: request.userId,
+        side: isCustomer ? 'customer' : 'provider',
+        files: [body.data],
+      })
+      const dispute = await disputeService.getDisputeById(order.dispute.id, request.userId)
+      return reply.status(201).send({ dispute })
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'ERROR'
+      return reply.status(400).send({ error: msg })
+    }
+  })
+
   // POST /orders/:id/dispute/resolve — admin only
   app.post('/:id/dispute/resolve', { preHandler: requireRole('ADMIN') }, async (request, reply) => {
     const { id } = request.params as { id: string }
@@ -442,5 +510,35 @@ export async function orderRoutes(app: FastifyInstance) {
       const msg = err instanceof Error ? err.message : 'ERROR'
       return reply.status(400).send({ error: msg })
     }
+  })
+
+  // GET /orders/:id/rating — the current user's own rating for this order, if any.
+  // Lets the app show "bewertet ✓" (and what was submitted) instead of a raw
+  // ALREADY_RATED error the second time someone opens the rating button.
+  app.get('/:id/rating', { preHandler: requireAuth }, async (request, reply) => {
+    const { id } = request.params as { id: string }
+    const order = await prisma.order.findUnique({
+      where: { id },
+      include: { offer: { include: { provider: true } } },
+    })
+    if (!order) return reply.status(404).send({ error: 'ORDER_NOT_FOUND' })
+
+    const isCustomer = order.customerId === request.userId
+    const isProvider = order.offer.provider.userId === request.userId
+    if (!isCustomer && !isProvider) return reply.status(403).send({ error: 'FORBIDDEN' })
+
+    let rating = null
+    if (isCustomer) {
+      const customerProfile = await prisma.customerProfile.findUnique({ where: { userId: request.userId } })
+      if (customerProfile) {
+        rating = await prisma.rating.findFirst({ where: { orderId: id, customerRaterId: customerProfile.id } })
+      }
+    } else {
+      const providerProfile = await prisma.providerProfile.findUnique({ where: { userId: request.userId } })
+      if (providerProfile) {
+        rating = await prisma.rating.findFirst({ where: { orderId: id, providerRaterId: providerProfile.id } })
+      }
+    }
+    return reply.send({ rating })
   })
 }

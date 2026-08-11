@@ -22,7 +22,7 @@ export default function ProviderDashboardScreen() {
 
   const { data: orders, isLoading } = useQuery({
     queryKey: ['provider-dashboard-orders'],
-    queryFn: () => ordersApi.list({ limit: 200 }).then((r) => r.data.orders),
+    queryFn: () => ordersApi.list({ limit: 200, perspective: 'provider' }).then((r) => r.data.orders),
   })
 
   const { data: profile } = useQuery({

@@ -2,6 +2,7 @@ import type { FastifyInstance } from 'fastify'
 import { z } from 'zod'
 import * as requestService from '../services/request.service.js'
 import * as offerService from '../services/offer.service.js'
+import * as chatService from '../services/chat.service.js'
 import { requireAuth, requireVerified } from '../middleware/auth.middleware.js'
 import { notifyEvent } from '../services/notification.service.js'
 import { prisma } from '../config/prisma.js'
@@ -280,6 +281,77 @@ export async function requestRoutes(app: FastifyInstance) {
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'ERROR'
       return reply.status(400).send({ error: msg })
+    }
+  })
+
+  // ── Pre-offer inquiry chat ─────────────────────────────────────────────────
+  // Lets a provider ask the customer clarifying questions before deciding
+  // whether to submit an offer — separate from the order chat, which only
+  // exists once an offer has been accepted and paid.
+
+  // POST /requests/:id/chat — provider opens (or resumes) their own thread
+  app.post('/:id/chat', { preHandler: requireVerified }, async (request, reply) => {
+    if (request.userRole !== 'PROVIDER') return reply.status(403).send({ error: 'PROVIDERS_ONLY' })
+    const { id } = request.params as { id: string }
+
+    const providerProfile = await prisma.providerProfile.findUnique({ where: { userId: request.userId } })
+    if (!providerProfile) return reply.status(400).send({ error: 'NO_PROVIDER_PROFILE' })
+
+    try {
+      const chat = await chatService.getOrCreateRequestChat(id, providerProfile.id, request.userId)
+      return reply.send({ chat })
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'ERROR'
+      const status = msg === 'FORBIDDEN' ? 403 : msg === 'REQUEST_NOT_FOUND' ? 404 : 400
+      return reply.status(status).send({ error: msg })
+    }
+  })
+
+  // GET /requests/:id/chats — customer sees every provider inquiry thread on their request
+  app.get('/:id/chats', { preHandler: requireAuth }, async (request, reply) => {
+    const { id } = request.params as { id: string }
+
+    const req = await prisma.serviceRequest.findUnique({ where: { id }, include: { customer: true } })
+    if (!req) return reply.status(404).send({ error: 'NOT_FOUND' })
+    if (req.customer.userId !== request.userId) return reply.status(403).send({ error: 'FORBIDDEN' })
+
+    const chats = await prisma.chat.findMany({
+      where: { requestId: id },
+      include: {
+        provider: { include: { user: { select: { id: true, displayName: true, profilePhotoUrl: true } } } },
+        messages: { orderBy: { createdAt: 'desc' }, take: 1 },
+      },
+      orderBy: { createdAt: 'desc' },
+    })
+    return reply.send({ chats })
+  })
+
+  // GET /requests/:id/chats/:providerId/messages
+  app.get('/:id/chats/:providerId/messages', { preHandler: requireAuth }, async (request, reply) => {
+    const { id, providerId } = request.params as { id: string; providerId: string }
+    try {
+      const messages = await chatService.getRequestMessages(id, providerId, request.userId)
+      return reply.send({ messages })
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'ERROR'
+      const status = msg === 'FORBIDDEN' ? 403 : msg.includes('NOT_FOUND') ? 404 : 400
+      return reply.status(status).send({ error: msg })
+    }
+  })
+
+  // POST /requests/:id/chats/:providerId/messages
+  app.post('/:id/chats/:providerId/messages', { preHandler: requireVerified }, async (request, reply) => {
+    const { id, providerId } = request.params as { id: string; providerId: string }
+    const body = z.object({ content: z.string().min(1).max(2000) }).safeParse(request.body)
+    if (!body.success) return reply.status(400).send({ error: 'VALIDATION_ERROR', details: body.error.flatten() })
+
+    try {
+      const message = await chatService.sendRequestMessage(id, providerId, request.userId, body.data.content)
+      return reply.status(201).send({ message })
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'ERROR'
+      const status = msg === 'FORBIDDEN' ? 403 : msg === 'RATE_LIMITED' ? 429 : msg.includes('NOT_FOUND') ? 404 : 400
+      return reply.status(status).send({ error: msg })
     }
   })
 }

@@ -207,7 +207,7 @@ export default function CustomerProfileScreen() {
           <Divider />
           <Row label="Geburtsdatum" value={profile.dateOfBirth ? formatDate(profile.dateOfBirth) : '—'} />
           <Divider />
-          <Row label="Rolle" value="Auftraggeber" />
+          <Row label="Rolle" value={user?.role === 'PROVIDER' ? 'Auftraggeber & Dienstleister' : 'Auftraggeber'} />
         </Card>
 
         {/* Menu */}
@@ -230,6 +230,12 @@ export default function CustomerProfileScreen() {
           <Divider />
           <MenuItem emoji="♿" label="Barrierefreiheit" onPress={() => router.push('/accessibility-settings')} />
           <Divider />
+          {user?.role !== 'PROVIDER' && (
+            <>
+              <MenuItem emoji="🔧" label="Werde Dienstleister" onPress={() => router.push('/become-provider')} />
+              <Divider />
+            </>
+          )}
           <MenuItem emoji="❓" label="Hilfe & Support" onPress={() => router.push('/support')} />
         </Card>
 

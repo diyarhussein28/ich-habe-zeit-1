@@ -89,6 +89,9 @@ export const profileApi = {
   deleteAccount: () =>
     apiClient.delete<{ message: string }>('/api/profile'),
 
+  becomeProvider: () =>
+    apiClient.post<{ token: string; user: User }>('/api/profile/become-provider'),
+
   // ── Addresses ────────────────────────────────────────────────────────────
   listAddresses: () =>
     apiClient.get<{ addresses: Address[] }>('/api/profile/addresses'),

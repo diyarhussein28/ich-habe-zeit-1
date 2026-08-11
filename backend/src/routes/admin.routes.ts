@@ -11,6 +11,8 @@ import { getKycDocuments } from '../services/kyc.service.js'
 import * as supportService from '../services/support.service.js'
 import { notifyEvent } from '../services/notification.service.js'
 import * as moderationService from '../services/moderation.service.js'
+import * as disputeService from '../services/dispute.service.js'
+import { broadcastOrderEvent } from '../ws/chat.gateway.js'
 import type { BlacklistIdentifierType, BanType } from '@prisma/client'
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -99,6 +101,18 @@ const recommendDisputeSchema = z.object({
     'ESCALATED',
   ] as const),
   note: z.string().min(10).max(2000),
+})
+
+const resolveDisputeSchema = z.object({
+  outcome: z.enum([
+    'FULL_RELEASE',
+    'PARTIAL_RELEASE',
+    'FULL_REFUND',
+    'REWORK_AGREEMENT',
+    'ESCALATED',
+  ] as const),
+  resolutionNote: z.string().min(10).max(2000),
+  releasedAmount: z.number().positive().optional(),
 })
 
 const assignTicketSchema = z.object({
@@ -745,11 +759,11 @@ export async function adminRoutes(app: FastifyInstance) {
                 offer: {
                   include: {
                     provider: {
-                      select: { id: true, user: { select: { displayName: true } } },
+                      select: { id: true, user: { select: { displayName: true, email: true } } },
                     },
                   },
                 },
-                customer: { select: { id: true, displayName: true } },
+                customer: { select: { id: true, displayName: true, email: true } },
               },
             },
           },
@@ -759,7 +773,36 @@ export async function adminRoutes(app: FastifyInstance) {
         }),
       ])
 
-      return reply.send({ data: items, total, hasMore: offset + query.limit < total })
+      // Reshape order into the same AdminOrder shape /admin/orders returns
+      // (renamed amount fields, flattened provider) so the admin panel can
+      // treat dispute.order identically everywhere.
+      const data = items.map((d) => ({
+        ...d,
+        order: {
+          id: d.order.id,
+          status: d.order.status,
+          totalAmount: d.order.grossAmount,
+          platformFee: d.order.commissionAmount,
+          providerAmount: d.order.netProviderAmount,
+          createdAt: d.order.createdAt,
+          updatedAt: d.order.updatedAt,
+          customer: d.order.customer,
+          provider: {
+            id: d.order.offer.provider.id,
+            displayName: d.order.offer.provider.user.displayName,
+            email: d.order.offer.provider.user.email,
+          },
+          request: {
+            id: d.order.request.id,
+            title: d.order.request.title,
+            city: d.order.request.addressCity ?? '',
+            plz: d.order.request.plz,
+            category: d.order.request.category ? { name: d.order.request.category.name } : undefined,
+          },
+        },
+      }))
+
+      return reply.send({ data, total, hasMore: offset + query.limit < total })
     }
   )
 
@@ -800,7 +843,35 @@ export async function adminRoutes(app: FastifyInstance) {
       })
 
       if (!dispute) return reply.status(404).send({ error: 'DISPUTE_NOT_FOUND' })
-      return reply.send({ dispute })
+
+      // Same AdminOrder reshape as /admin/orders and the dispute list route.
+      const shaped = {
+        ...dispute,
+        order: {
+          id: dispute.order.id,
+          status: dispute.order.status,
+          totalAmount: dispute.order.grossAmount,
+          platformFee: dispute.order.commissionAmount,
+          providerAmount: dispute.order.netProviderAmount,
+          createdAt: dispute.order.createdAt,
+          updatedAt: dispute.order.updatedAt,
+          customer: dispute.order.customer,
+          provider: {
+            id: dispute.order.offer.provider.id,
+            displayName: dispute.order.offer.provider.user.displayName,
+            email: dispute.order.offer.provider.user.email,
+          },
+          request: {
+            id: dispute.order.request.id,
+            title: dispute.order.request.title,
+            city: dispute.order.request.addressCity ?? '',
+            plz: dispute.order.request.plz,
+            category: dispute.order.request.category ? { name: dispute.order.request.category.name } : undefined,
+          },
+        },
+      }
+
+      return reply.send({ dispute: shaped })
     }
   )
 
@@ -834,6 +905,7 @@ export async function adminRoutes(app: FastifyInstance) {
         id,
         { assignedToId: body.data.assignedToId }
       )
+      broadcastOrderEvent(updated.orderId, { type: 'dispute_updated', disputeId: id })
 
       return reply.send({ dispute: updated })
     }
@@ -872,8 +944,35 @@ export async function adminRoutes(app: FastifyInstance) {
         id,
         { recommendation: body.data.recommendation }
       )
+      broadcastOrderEvent(updated.orderId, { type: 'dispute_updated', disputeId: id })
 
       return reply.send({ dispute: updated })
+    }
+  )
+
+  // POST /admin/disputes/:id/resolve — admin only (Help Desk can assign + recommend,
+  // but the financial decision that actually moves escrow money requires ADMIN).
+  app.post(
+    '/disputes/:id/resolve',
+    { preHandler: requireRole('ADMIN') },
+    async (request, reply) => {
+      const { id } = request.params as { id: string }
+      const body = resolveDisputeSchema.safeParse(request.body)
+      if (!body.success) {
+        return reply.status(400).send({ error: 'VALIDATION_ERROR', details: body.error.flatten() })
+      }
+
+      try {
+        const dispute = await disputeService.resolveDispute({
+          disputeId: id,
+          resolvedByUserId: request.userId,
+          ...body.data,
+        })
+        return reply.send({ dispute })
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : 'ERROR'
+        return reply.status(msg === 'DISPUTE_NOT_FOUND' ? 404 : 400).send({ error: msg })
+      }
     }
   )
 

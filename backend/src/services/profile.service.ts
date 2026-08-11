@@ -27,6 +27,29 @@ export async function getMyProfile(userId: string) {
   return safeUser
 }
 
+// ─── Become a provider ────────────────────────────────────────────────────────
+// A customer can additionally take on the provider role without losing their
+// customer capabilities (Order.customerId is just a userId — nothing in the
+// schema requires role === CUSTOMER to book a service, mirroring how existing
+// providers can already post their own requests).
+
+export async function becomeProvider(userId: string) {
+  const user = await prisma.user.findUnique({ where: { id: userId } })
+  if (!user) throw new Error('USER_NOT_FOUND')
+  if (user.role === 'PROVIDER') throw new Error('ALREADY_PROVIDER')
+  if (user.role !== 'CUSTOMER') throw new Error('NOT_ALLOWED')
+
+  return prisma.$transaction(async (tx) => {
+    const updated = await tx.user.update({ where: { id: userId }, data: { role: 'PROVIDER' } })
+    await tx.providerProfile.upsert({
+      where: { userId },
+      create: { userId },
+      update: {},
+    })
+    return updated
+  })
+}
+
 // ─── Update my profile ────────────────────────────────────────────────────────
 
 export async function updateMyProfile(

@@ -14,7 +14,7 @@ import { queryClient } from '../src/utils/queryClient'
 import { colors } from '../src/constants/theme'
 
 function RootLayoutInner() {
-  const { hydrate, logout } = useAuthStore()
+  const { hydrate, logout, user } = useAuthStore()
   const hydrateAccessibility = useAccessibilityStore((s) => s.hydrate)
 
   useEffect(() => {
@@ -26,11 +26,21 @@ function RootLayoutInner() {
   usePushNotifications()
 
   return (
-    <Stack screenOptions={{ headerShown: false }}>
+    // Keying on the account id forces React to fully unmount and remount every
+    // screen (Tabs, local component state, useQuery observers) on login/logout —
+    // otherwise Expo Router just re-focuses already-mounted (customer)/(provider)
+    // screens across account switches, leaking stale state/closures from the
+    // previous account (blank fields, stuck spinners) into the new session.
+    <Stack key={user?.id ?? 'anonymous'} screenOptions={{ headerShown: false }}>
       <Stack.Screen name="index" />
       <Stack.Screen name="(auth)" />
       <Stack.Screen name="(customer)" />
       <Stack.Screen name="(provider)" />
+      <Stack.Screen name="requests/create" options={{ presentation: 'modal' }} />
+      <Stack.Screen name="become-provider" options={{ presentation: 'modal' }} />
+      <Stack.Screen name="disputes/[orderId]" />
+      <Stack.Screen name="providers/[id]" />
+      <Stack.Screen name="chat/request/[requestId]" />
       <Stack.Screen name="chat" />
       <Stack.Screen name="support" />
       <Stack.Screen name="addresses" />

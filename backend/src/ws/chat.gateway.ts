@@ -18,6 +18,15 @@ function broadcast(orderId: string, payload: object, exclude?: WebSocket) {
   }
 }
 
+// Lets other services (e.g. dispute.service.ts, admin dispute routes) push a
+// lightweight "something changed, go refetch" event to whichever party is
+// currently connected to this order's room — without knowing anything about
+// WebSocket internals. Silently a no-op if nobody's connected; those clients
+// pick up the change on their next natural refetch/poll.
+export function broadcastOrderEvent(orderId: string, payload: object) {
+  broadcast(orderId, payload)
+}
+
 function send(socket: WebSocket, payload: object) {
   if (socket.readyState === 1) socket.send(JSON.stringify(payload))
 }

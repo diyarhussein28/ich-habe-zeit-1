@@ -16,7 +16,7 @@ export default function PayoutHistoryScreen() {
 
   const { data, isLoading } = useQuery({
     queryKey: ['payout-history'],
-    queryFn: () => ordersApi.list({ limit: 100 }).then((r) => r.data.orders),
+    queryFn: () => ordersApi.list({ limit: 100, perspective: 'provider' }).then((r) => r.data.orders),
   })
 
   const payouts = (data ?? []).filter((o: Order) => PAYOUT_STATUSES.includes(o.status))

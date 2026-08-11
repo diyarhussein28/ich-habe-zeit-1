@@ -21,6 +21,7 @@ import { listingRoutes } from './routes/listing.routes.js'
 import { legalRoutes } from './routes/legal.routes.js'
 import { supportRoutes } from './routes/support.routes.js'
 import { mediaRoutes } from './routes/media.routes.js'
+import { providerRoutes } from './routes/provider.routes.js'
 import { chatGateway } from './ws/chat.gateway.js'
 import { PUBLIC_UPLOADS_DIR } from './services/media.service.js'
 
@@ -47,9 +48,11 @@ export async function buildApp() {
     sign: { expiresIn: env.JWT_EXPIRES_IN as string },
   })
 
-  // Rate limiting
+  // Rate limiting — a single mobile session firing several concurrent screen
+  // queries (esp. right after login) can burst well past 100/min in dev; keep
+  // production strict but don't throttle local/dev testing.
   await app.register(rateLimit, {
-    max: 100,
+    max: env.NODE_ENV === 'production' ? 100 : 2000,
     timeWindow: '1 minute',
   })
 
@@ -83,6 +86,7 @@ export async function buildApp() {
   await app.register(legalRoutes, { prefix: '/api/legal-docs' })
   await app.register(supportRoutes, { prefix: '/api/support' })
   await app.register(mediaRoutes, { prefix: '/api/media' })
+  await app.register(providerRoutes, { prefix: '/api/providers' })
 
   // Health check
   app.get('/health', async () => ({ status: 'ok', timestamp: new Date().toISOString() }))

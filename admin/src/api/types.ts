@@ -234,12 +234,23 @@ export interface AdminOrder {
   }
 }
 
+export type DisputeStatus = 'OPEN' | 'IN_REVIEW' | 'PENDING_DECISION' | 'RESOLVED' | 'ESCALATED'
+
 export interface AdminDispute {
   id: string
   orderId: string
-  status: 'OPEN' | 'UNDER_REVIEW' | 'RESOLVED' | 'CLOSED'
-  reason: string
-  resolution?: string
+  status: DisputeStatus
+  reasonCategory: string
+  description: string
+  intakeAnswers?: { key: string; question: string; answer: string }[]
+  respondedById?: string
+  responseAgreesWithClaim?: boolean
+  responseDescription?: string
+  respondedAt?: string
+  assignedToId?: string
+  internalNote?: string
+  recommendation?: DisputeOutcome
+  resolutionNote?: string
   outcome?: DisputeOutcome
   createdAt: string
   resolvedAt?: string
@@ -247,7 +258,7 @@ export interface AdminDispute {
   evidence?: Array<{
     id: string
     fileUrl: string
-    description?: string
+    fileName: string
     side: string
     createdAt: string
   }>

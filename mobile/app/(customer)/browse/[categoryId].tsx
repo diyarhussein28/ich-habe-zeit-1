@@ -49,7 +49,7 @@ export default function BrowseCategoryScreen() {
               label="+ Eigenen Auftrag erstellen"
               onPress={() =>
                 router.push({
-                  pathname: '/(customer)/requests/create',
+                  pathname: '/requests/create',
                   params: { categoryId, categoryName },
                 })
               }

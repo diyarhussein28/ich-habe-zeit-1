@@ -132,6 +132,42 @@ export interface Order {
   offer?: Offer
 }
 
+export type DisputeStatus = 'OPEN' | 'IN_REVIEW' | 'PENDING_DECISION' | 'RESOLVED' | 'ESCALATED'
+export type DisputeOutcome = 'FULL_RELEASE' | 'PARTIAL_RELEASE' | 'FULL_REFUND' | 'REWORK_AGREEMENT' | 'ESCALATED'
+
+export interface DisputeEvidence {
+  id: string
+  side: 'customer' | 'provider'
+  uploadedById: string
+  fileUrl: string
+  fileName: string
+  fileType: string
+  fileSizeBytes: number
+  createdAt: string
+}
+
+export interface Dispute {
+  id: string
+  orderId: string
+  openedById: string
+  status: DisputeStatus
+  reasonCategory: string
+  description: string
+  intakeAnswers?: { key: string; question: string; answer: string }[]
+  evidence: DisputeEvidence[]
+  respondedById?: string
+  responseAgreesWithClaim?: boolean
+  responseDescription?: string
+  respondedAt?: string
+  outcome?: DisputeOutcome
+  resolvedById?: string
+  resolvedAt?: string
+  resolutionNote?: string
+  createdAt: string
+  updatedAt: string
+  order?: Order
+}
+
 export interface ChatMessage {
   id: string
   chatId: string

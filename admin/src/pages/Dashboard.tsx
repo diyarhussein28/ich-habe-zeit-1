@@ -4,7 +4,7 @@ import { ArrowRight, AlertTriangle } from 'lucide-react'
 import { adminApi } from '@/api/admin.api'
 import { StatCard } from '@/components/ui/StatCard'
 import { PageSpinner } from '@/components/ui/Spinner'
-import { KycBadge, OrderStatusBadge } from '@/components/ui/Badge'
+import { KycBadge, OrderStatusBadge, DISPUTE_REASON_CATEGORY_LABEL } from '@/components/ui/Badge'
 import { formatEur, formatDateTime, initials } from '@/lib/utils'
 
 export default function Dashboard() {
@@ -79,7 +79,9 @@ export default function Dashboard() {
                     <p className="text-sm font-medium text-gray-900 truncate max-w-[240px]">
                       {d.order.request?.title ?? `Bestellung #${d.orderId.slice(-6)}`}
                     </p>
-                    <p className="text-xs text-gray-500 mt-0.5 truncate max-w-[240px]">{d.reason}</p>
+                    <p className="text-xs text-gray-500 mt-0.5 truncate max-w-[240px]">
+                      {DISPUTE_REASON_CATEGORY_LABEL[d.reasonCategory] ?? d.reasonCategory}
+                    </p>
                     <p className="text-xs text-gray-400 mt-1">{formatDateTime(d.createdAt)}</p>
                   </div>
                   <ArrowRight size={14} className="text-gray-400 mt-1 shrink-0" />

@@ -14,7 +14,7 @@ export default function ProviderMessagesScreen() {
   const router = useRouter()
   const { data } = useQuery({
     queryKey: ['provider-orders-chat'],
-    queryFn: () => ordersApi.list({ limit: 50 }).then((r) => r.data),
+    queryFn: () => ordersApi.list({ limit: 50, perspective: 'provider' }).then((r) => r.data),
   })
 
   const activeOrders = ((data as unknown as { orders?: Order[] })?.orders ?? []).filter((o) => ACTIVE_STATUSES.includes(o.status))

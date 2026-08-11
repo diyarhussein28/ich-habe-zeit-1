@@ -23,6 +23,7 @@ import { colors, spacing, fontSize, fontWeight, radius } from '../../src/constan
 import type { ServiceCategory, Order } from '../../src/api/types'
 import { formatDate } from '../../src/utils/date'
 import { formatEur } from '../../src/utils/currency'
+import { isActiveOrderStatus } from '../../src/constants/orderStatus'
 
 export default function CustomerHomeScreen() {
   const router = useRouter()
@@ -35,9 +36,9 @@ export default function CustomerHomeScreen() {
     queryFn: () => categoriesApi.list().then((r) => r.data.categories),
   })
 
-  const { data: recentOrdersData } = useQuery({
+  const { data: recentOrdersData, isLoading: activeOrdersLoading } = useQuery({
     queryKey: ['customer-orders-recent'],
-    queryFn: () => ordersApi.list({ limit: 3 }).then((r) => {
+    queryFn: () => ordersApi.list({ limit: 20, perspective: 'customer' }).then((r) => {
       const raw = r.data as unknown as { orders?: Order[] }
       return raw.orders ?? []
     }),
@@ -48,7 +49,7 @@ export default function CustomerHomeScreen() {
     c.name.toLowerCase().includes(search.toLowerCase()),
   )
 
-  const recentOrders = recentOrdersData ?? []
+  const activeOrders = (recentOrdersData ?? []).filter((o) => isActiveOrderStatus(o.status)).slice(0, 3)
 
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
@@ -58,7 +59,7 @@ export default function CustomerHomeScreen() {
           <Text style={styles.greeting}>Hallo, {user?.displayName} 👋</Text>
           <Text style={styles.subgreeting}>Was suchst du heute?</Text>
         </View>
-        <TouchableOpacity onPress={() => router.push('/(customer)/requests/create')} style={styles.postBtn}>
+        <TouchableOpacity onPress={() => router.push('/requests/create')} style={styles.postBtn}>
           <Text style={styles.postBtnText}>+ Auftrag</Text>
         </TouchableOpacity>
       </View>
@@ -76,22 +77,32 @@ export default function CustomerHomeScreen() {
       </View>
 
       <ScrollView contentContainerStyle={styles.list} showsVerticalScrollIndicator={false}>
-        {/* Recent orders */}
-        {recentOrders.length > 0 && (
-          <View style={styles.section}>
-            <View style={styles.sectionRow}>
-              <Text style={styles.sectionTitle}>Zuletzt gebucht</Text>
-              <TouchableOpacity onPress={() => router.push('/(customer)/orders')}>
-                <Text style={styles.seeAll}>Alle anzeigen →</Text>
-              </TouchableOpacity>
+        {/* Active jobs */}
+        <View style={styles.section}>
+          <View style={styles.sectionRow}>
+            <Text style={styles.sectionTitle}>Aktive Aufträge</Text>
+            <TouchableOpacity onPress={() => router.push('/(customer)/orders')}>
+              <Text style={styles.seeAll}>Alle anzeigen →</Text>
+            </TouchableOpacity>
+          </View>
+          {activeOrdersLoading ? (
+            <ActivityIndicator color={colors.primary} style={{ marginVertical: spacing.lg }} />
+          ) : activeOrders.length === 0 ? (
+            <View style={styles.activeEmpty}>
+              <Text style={styles.activeEmptyEmoji}>✅</Text>
+              <Text style={styles.activeEmptyTitle}>Keine aktiven Aufträge</Text>
+              <Text style={styles.activeEmptyText}>
+                Du hast gerade nichts Laufendes. Durchsuche Inserate oder erstelle einen neuen Auftrag.
+              </Text>
             </View>
-            {recentOrders.map((order) => (
+          ) : (
+            activeOrders.map((order) => (
               <RecentOrderCard
                 key={order.id}
                 order={order}
                 onRepeat={() =>
                   router.push({
-                    pathname: '/(customer)/requests/create',
+                    pathname: '/requests/create',
                     params: order.request?.categoryId
                       ? { categoryId: order.request.categoryId }
                       : {},
@@ -99,9 +110,9 @@ export default function CustomerHomeScreen() {
                 }
                 onView={() => router.push(`/(customer)/orders/${order.id}`)}
               />
-            ))}
-          </View>
-        )}
+            ))
+          )}
+        </View>
 
         {/* Inserate banner */}
         <TouchableOpacity
@@ -285,4 +296,11 @@ const styles = StyleSheet.create({
   },
   empty: { alignItems: 'center', paddingTop: spacing.xl },
   emptyText: { fontSize: fontSize.md, color: colors.textSecondary },
+  activeEmpty: {
+    alignItems: 'center', paddingVertical: spacing.xl, paddingHorizontal: spacing.lg,
+    backgroundColor: colors.surface, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border,
+  },
+  activeEmptyEmoji: { fontSize: 36, marginBottom: spacing.sm },
+  activeEmptyTitle: { fontSize: fontSize.md, fontWeight: fontWeight.bold, color: colors.text, marginBottom: spacing.xs },
+  activeEmptyText: { fontSize: fontSize.sm, color: colors.textSecondary, textAlign: 'center', lineHeight: 20 },
 })

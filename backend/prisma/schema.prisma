@@ -131,6 +131,7 @@ enum ModerationContentType {
   SERVICE_PHOTO
   REQUEST_PHOTO
   COMPLETION_PHOTO
+  DISPUTE_EVIDENCE
 }
 
 enum ModerationStatus {
@@ -243,6 +244,7 @@ model ProviderProfile {
   listings         ServiceListing[]
   ratings          Rating[]             @relation("ProviderRatingsReceived")
   ratingsGiven     Rating[]             @relation("ProviderRatingsGiven")
+  requestChats     Chat[]
 
   createdAt        DateTime    @default(now())
   updatedAt        DateTime    @updatedAt
@@ -381,6 +383,7 @@ model ServiceRequest {
   // Relations
   offers           Offer[]
   order            Order?
+  chats            Chat[]
 
   createdAt        DateTime        @default(now())
   updatedAt        DateTime        @updatedAt
@@ -505,10 +508,20 @@ model OrderStatusHistory {
 
 model Chat {
   id        String        @id @default(uuid())
-  orderId   String        @unique
-  order     Order         @relation(fields: [orderId], references: [id])
+  orderId   String?       @unique
+  order     Order?        @relation(fields: [orderId], references: [id])
+  // Pre-offer inquiry chat: a provider asking the customer clarifying
+  // questions about a ServiceRequest before submitting an offer. Multiple
+  // providers can each have their own thread on the same request, so the
+  // pair (requestId, providerId) — not requestId alone — identifies a chat.
+  requestId String?
+  request   ServiceRequest? @relation(fields: [requestId], references: [id])
+  providerId String?
+  provider  ProviderProfile? @relation(fields: [providerId], references: [id])
   messages  ChatMessage[]
   createdAt DateTime      @default(now())
+
+  @@unique([requestId, providerId])
 }
 
 model ChatMessage {
@@ -548,9 +561,18 @@ model Dispute {
   status        DisputeStatus @default(OPEN)
   reasonCategory String
   description   String        @db.Text
+  // Structured answers from the branching intake questionnaire:
+  // [{ key, question, answer }, ...]
+  intakeAnswers Json?
 
   // Evidence
   evidence     DisputeEvidence[]
+
+  // The other party's structured statement, collected before admin review
+  respondedById String?
+  responseAgreesWithClaim Boolean?
+  responseDescription String? @db.Text
+  respondedAt   DateTime?
 
   // Help Desk
   assignedToId  String?

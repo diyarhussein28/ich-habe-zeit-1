@@ -1,8 +1,10 @@
 import type { FastifyInstance } from 'fastify'
 import { z } from 'zod'
+import { v4 as uuidv4 } from 'uuid'
 import * as profileService from '../services/profile.service.js'
 import * as providerService from '../services/provider.service.js'
 import * as gdprService from '../services/gdpr.service.js'
+import * as authService from '../services/auth.service.js'
 import { requireAuth, requireRole } from '../middleware/auth.middleware.js'
 import { prisma } from '../config/prisma.js'
 
@@ -124,6 +126,41 @@ export async function profileRoutes(app: FastifyInstance) {
       return reply.send({ message: 'Konto gelöscht.' })
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'ERROR'
+      return reply.status(400).send({ error: msg })
+    }
+  })
+
+  // POST /profile/become-provider — a customer opts in to also offering services.
+  // Keeps their existing role capabilities (Order.customerId doesn't require
+  // role === CUSTOMER) and additionally creates a minimal ProviderProfile, the
+  // same shape registerUser() creates for a fresh PROVIDER signup. Issues a
+  // fresh session/token since the role claim is baked into the JWT.
+  app.post('/become-provider', { preHandler: requireAuth }, async (request, reply) => {
+    try {
+      const user = await profileService.becomeProvider(request.userId)
+
+      const sessionToken = uuidv4()
+      await authService.createSession(user.id, sessionToken, {
+        deviceInfo: request.headers['user-agent'],
+        ipAddress: request.ip,
+      })
+      const token = app.jwt.sign({ sub: user.id, role: user.role, sessionToken })
+
+      return reply.send({
+        token,
+        user: {
+          id: user.id,
+          email: user.email,
+          displayName: user.displayName,
+          role: user.role,
+          emailVerified: user.emailVerified,
+          phoneVerified: user.phoneVerified,
+          verificationStatus: user.verificationStatus,
+        },
+      })
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'ERROR'
+      if (msg === 'ALREADY_PROVIDER') return reply.status(409).send({ error: msg })
       return reply.status(400).send({ error: msg })
     }
   })

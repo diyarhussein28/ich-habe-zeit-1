@@ -16,6 +16,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useRouter } from 'expo-router'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { requestsApi } from '../../src/api/requests.api'
+import { ordersApi } from '../../src/api/orders.api'
 import { Card } from '../../src/components/ui/Card'
 import { Badge } from '../../src/components/ui/Badge'
 import { Button } from '../../src/components/ui/Button'
@@ -23,8 +24,10 @@ import { Input } from '../../src/components/ui/Input'
 import { useAuthStore } from '../../src/store/auth.store'
 import { getApiErrorMessage } from '../../src/api/client'
 import { colors, spacing, fontSize, fontWeight, radius } from '../../src/constants/theme'
-import type { ServiceRequest } from '../../src/api/types'
+import type { ServiceRequest, Order } from '../../src/api/types'
 import { formatDate } from '../../src/utils/date'
+import { formatEur } from '../../src/utils/currency'
+import { isActiveOrderStatus } from '../../src/constants/orderStatus'
 
 export default function ProviderFeedScreen() {
   const { user } = useAuthStore()
@@ -40,6 +43,15 @@ export default function ProviderFeedScreen() {
     queryKey: ['provider-feed'],
     queryFn: () => requestsApi.providerFeed({ limit: 30 }).then((r) => r.data),
   })
+
+  const { data: myOrdersData, isLoading: activeOrdersLoading } = useQuery({
+    queryKey: ['provider-orders-recent'],
+    queryFn: () => ordersApi.list({ limit: 20, perspective: 'provider' }).then((r) => {
+      const raw = r.data as unknown as { orders?: Order[] }
+      return raw.orders ?? []
+    }),
+  })
+  const activeOrders = (myOrdersData ?? []).filter((o) => isActiveOrderStatus(o.status)).slice(0, 3)
 
   const offerMutation = useMutation({
     mutationFn: () => {
@@ -71,7 +83,7 @@ export default function ProviderFeedScreen() {
     <SafeAreaView style={styles.safe} edges={['top']}>
       <View style={styles.header}>
         <Text style={styles.greeting} numberOfLines={1}>Hallo, {user?.displayName} 👋</Text>
-        <Text style={styles.sub}>Neue Aufträge in deiner Region</Text>
+        <Text style={styles.sub}>Willkommen zurück</Text>
         <View style={styles.headerActions}>
           <TouchableOpacity onPress={() => router.push('/(provider)/listings')} style={styles.myRequestsBtn}>
             <Text style={styles.myRequestsBtnText} numberOfLines={1}>Inserate</Text>
@@ -79,7 +91,7 @@ export default function ProviderFeedScreen() {
           <TouchableOpacity onPress={() => router.push('/(provider)/requests')} style={styles.myRequestsBtn}>
             <Text style={styles.myRequestsBtnText} numberOfLines={1}>Anfragen</Text>
           </TouchableOpacity>
-          <TouchableOpacity onPress={() => router.push('/(customer)/requests/create')} style={styles.postBtn}>
+          <TouchableOpacity onPress={() => router.push('/requests/create')} style={styles.postBtn}>
             <Text style={styles.postBtnText} numberOfLines={1}>+ Auftrag</Text>
           </TouchableOpacity>
         </View>
@@ -97,6 +109,32 @@ export default function ProviderFeedScreen() {
         contentContainerStyle={styles.list}
         showsVerticalScrollIndicator={false}
         refreshControl={<RefreshControl refreshing={isLoading} onRefresh={refetch} />}
+        ListHeaderComponent={
+          <View style={styles.activeSection}>
+            <View style={styles.sectionRow}>
+              <Text style={styles.sectionTitle}>Deine aktiven Aufträge</Text>
+              <TouchableOpacity onPress={() => router.push('/(provider)/orders')}>
+                <Text style={styles.seeAll}>Alle anzeigen →</Text>
+              </TouchableOpacity>
+            </View>
+            {activeOrdersLoading ? (
+              <ActivityIndicator color={colors.primary} style={{ marginVertical: spacing.lg }} />
+            ) : activeOrders.length === 0 ? (
+              <View style={styles.activeEmpty}>
+                <Text style={styles.activeEmptyEmoji}>🔧</Text>
+                <Text style={styles.activeEmptyTitle}>Keine aktiven Aufträge</Text>
+                <Text style={styles.activeEmptyText}>
+                  Sobald du ein Angebot gewinnst, erscheint der Auftrag hier.
+                </Text>
+              </View>
+            ) : (
+              activeOrders.map((order) => (
+                <ActiveOrderCard key={order.id} order={order} onPress={() => router.push(`/(provider)/orders/${order.id}`)} />
+              ))
+            )}
+            <Text style={[styles.sectionTitle, styles.feedTitle]}>Neue Aufträge in deiner Region</Text>
+          </View>
+        }
         ListEmptyComponent={
           isLoading ? (
             <ActivityIndicator color={colors.primary} style={{ marginTop: spacing.xxl }} />
@@ -111,7 +149,16 @@ export default function ProviderFeedScreen() {
           )
         }
         renderItem={({ item }) => (
-          <FeedCard request={item} onOffer={() => setSelectedRequest(item)} />
+          <FeedCard
+            request={item}
+            onOffer={() => setSelectedRequest(item)}
+            onChat={() =>
+              router.push({
+                pathname: '/chat/request/[requestId]',
+                params: { requestId: item.id, title: item.title },
+              })
+            }
+          />
         )}
       />
 
@@ -190,9 +237,11 @@ export default function ProviderFeedScreen() {
 function FeedCard({
   request,
   onOffer,
+  onChat,
 }: {
   request: ServiceRequest & { myOffer?: { id: string; status: string; proposedPrice: number } | null }
   onOffer: () => void
+  onChat: () => void
 }) {
   const alreadyOffered = !!request.myOffer
   return (
@@ -212,19 +261,64 @@ function FeedCard({
         <Text style={styles.postedAt}>
           {formatDate(request.createdAt)}
         </Text>
-        {alreadyOffered ? (
-          <View style={styles.offeredBadge}>
-            <Text style={styles.offeredBadgeText}>✓ Angeboten · {request.myOffer!.proposedPrice.toFixed(0)} €</Text>
-          </View>
-        ) : (
-          <TouchableOpacity onPress={onOffer} style={styles.offerBtn}>
-            <Text style={styles.offerBtnText}>Angebot abgeben</Text>
+        <View style={styles.footerActions}>
+          <TouchableOpacity onPress={onChat} style={styles.chatBtn}>
+            <Text style={styles.chatBtnText}>💬 Chat</Text>
           </TouchableOpacity>
-        )}
+          {alreadyOffered ? (
+            <View style={styles.offeredBadge}>
+              <Text style={styles.offeredBadgeText}>✓ Angeboten · {request.myOffer!.proposedPrice.toFixed(0)} €</Text>
+            </View>
+          ) : (
+            <TouchableOpacity onPress={onOffer} style={styles.offerBtn}>
+              <Text style={styles.offerBtnText}>Angebot abgeben</Text>
+            </TouchableOpacity>
+          )}
+        </View>
       </View>
     </Card>
   )
 }
+
+const ORDER_STATUS_LABEL: Record<string, string> = {
+  AWAITING_PAYMENT: 'Zahlung ausstehend',
+  IN_PROGRESS: 'In Bearbeitung',
+  COMPLETED_BY_PROVIDER: 'Abgezeichnet',
+  AWAITING_RELEASE: 'Freigabe ausstehend',
+  DISPUTED: 'Streitfall',
+}
+
+const ORDER_STATUS_COLOR: Record<string, 'primary' | 'success' | 'warning' | 'error' | 'neutral'> = {
+  AWAITING_PAYMENT: 'warning',
+  IN_PROGRESS: 'primary',
+  COMPLETED_BY_PROVIDER: 'success',
+  AWAITING_RELEASE: 'warning',
+  DISPUTED: 'error',
+}
+
+function ActiveOrderCard({ order, onPress }: { order: Order; onPress: () => void }) {
+  const title = order.request?.title ?? 'Auftrag'
+  return (
+    <TouchableOpacity onPress={onPress} activeOpacity={0.85}>
+      <Card style={activeOrderStyles.card}>
+        <View style={activeOrderStyles.row}>
+          <Text style={activeOrderStyles.title} numberOfLines={1}>{title}</Text>
+          <Badge label={ORDER_STATUS_LABEL[order.status] ?? order.status} color={ORDER_STATUS_COLOR[order.status] ?? 'neutral'} />
+        </View>
+        <Text style={activeOrderStyles.amount}>
+          {formatEur(order.netProviderAmount ?? order.providerAmount ?? 0)}
+        </Text>
+      </Card>
+    </TouchableOpacity>
+  )
+}
+
+const activeOrderStyles = StyleSheet.create({
+  card: { marginBottom: spacing.sm },
+  row: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.xs },
+  title: { flex: 1, fontSize: fontSize.sm, fontWeight: fontWeight.semibold, color: colors.text, marginRight: spacing.sm },
+  amount: { fontSize: fontSize.md, fontWeight: fontWeight.bold, color: colors.secondary },
+})
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.background },
@@ -241,6 +335,18 @@ const styles = StyleSheet.create({
   postBtn: { backgroundColor: colors.primary, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, borderRadius: radius.full },
   postBtnText: { fontSize: fontSize.sm, fontWeight: fontWeight.semibold, color: colors.textInverse },
   list: { paddingHorizontal: spacing.lg, paddingBottom: spacing.xl },
+  activeSection: { marginBottom: spacing.md },
+  sectionRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.sm },
+  sectionTitle: { fontSize: fontSize.md, fontWeight: fontWeight.bold, color: colors.text },
+  feedTitle: { marginTop: spacing.md, marginBottom: spacing.sm },
+  seeAll: { fontSize: fontSize.xs, color: colors.primary, fontWeight: fontWeight.semibold },
+  activeEmpty: {
+    alignItems: 'center', paddingVertical: spacing.lg, paddingHorizontal: spacing.lg,
+    backgroundColor: colors.surface, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border,
+  },
+  activeEmptyEmoji: { fontSize: 32, marginBottom: spacing.sm },
+  activeEmptyTitle: { fontSize: fontSize.sm, fontWeight: fontWeight.bold, color: colors.text, marginBottom: spacing.xs },
+  activeEmptyText: { fontSize: fontSize.xs, color: colors.textSecondary, textAlign: 'center', lineHeight: 18 },
   card: { marginBottom: spacing.md },
   cardTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: spacing.xs },
   cardMeta: { flex: 1 },
@@ -250,6 +356,9 @@ const styles = StyleSheet.create({
   cardTitle: { fontSize: fontSize.md, fontWeight: fontWeight.bold, color: colors.text, marginBottom: spacing.xs, lineHeight: 22 },
   cardDesc: { fontSize: fontSize.sm, color: colors.textSecondary, lineHeight: 20, marginBottom: spacing.md },
   cardFooter: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  footerActions: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  chatBtn: { paddingHorizontal: spacing.sm, paddingVertical: spacing.xs, borderRadius: radius.full, borderWidth: 1, borderColor: colors.border },
+  chatBtnText: { fontSize: fontSize.xs, fontWeight: fontWeight.medium, color: colors.text },
   postedAt: { fontSize: fontSize.xs, color: colors.textDisabled },
   offerBtn: {
     backgroundColor: colors.primary,

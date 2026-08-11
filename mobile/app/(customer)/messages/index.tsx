@@ -14,7 +14,7 @@ export default function CustomerMessagesScreen() {
   const router = useRouter()
   const { data, isLoading } = useQuery({
     queryKey: ['customer-orders-chat'],
-    queryFn: () => ordersApi.list({ limit: 50 }).then((r) => r.data),
+    queryFn: () => ordersApi.list({ limit: 50, perspective: 'customer' }).then((r) => r.data),
   })
 
   const activeOrders = ((data as unknown as { orders?: Order[] })?.orders ?? []).filter((o) =>

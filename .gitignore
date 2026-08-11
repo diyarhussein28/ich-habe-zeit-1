@@ -50,3 +50,6 @@ coverage/
 
 # Claude Code local settings (machine-specific)
 .claude/
+
+# Locally generated uploads (KYC docs, profile/dispute photos from dev testing)
+backend/uploads/

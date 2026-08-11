@@ -76,6 +76,7 @@ export default function BrowseListingsScreen() {
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
+        style={styles.chipsScroll}
         contentContainerStyle={styles.chips}
       >
         <TouchableOpacity
@@ -202,7 +203,8 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.border,
   },
-  chips: { paddingHorizontal: spacing.lg, paddingBottom: spacing.sm, gap: spacing.sm },
+  chipsScroll: { flexGrow: 0, flexShrink: 0 },
+  chips: { paddingHorizontal: spacing.lg, paddingBottom: spacing.sm, gap: spacing.sm, alignItems: 'center' },
   chip: {
     paddingHorizontal: spacing.md, paddingVertical: 6,
     borderRadius: radius.full, borderWidth: 1, borderColor: colors.border,

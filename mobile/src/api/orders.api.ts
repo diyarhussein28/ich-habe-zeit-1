@@ -2,7 +2,7 @@ import { apiClient } from './client'
 import type { Order, ChatMessage, PaginatedResponse } from './types'
 
 export const ordersApi = {
-  list: (params?: { page?: number; limit?: number; status?: string }) =>
+  list: (params?: { page?: number; limit?: number; status?: string; perspective?: 'customer' | 'provider' }) =>
     apiClient.get<{ orders: Order[] }>('/api/orders', { params }),
 
   get: (id: string) =>
@@ -19,9 +19,6 @@ export const ordersApi = {
 
   releasePayment: (id: string) =>
     apiClient.post<Order>(`/api/orders/${id}/release`),
-
-  openDispute: (id: string, reason: string) =>
-    apiClient.post<Order>(`/api/orders/${id}/dispute`, { reason }),
 
   cancel: (id: string) =>
     apiClient.post<Order>(`/api/orders/${id}/cancel`),

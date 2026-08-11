@@ -39,6 +39,9 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   login: async (token: string, user: User) => {
     // Guard against any leftover cache from a previous session on this device
     // (e.g. a different account was logged in) before priming a new one.
+    // Cancel first so in-flight requests from the old session can't resolve
+    // after clear() and repopulate the cache with the previous user's data.
+    await queryClient.cancelQueries()
     queryClient.clear()
     await setItem(TOKEN_KEY, token)
     await setItem('ihz_user', JSON.stringify(user))
@@ -54,6 +57,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   },
 
   logout: async () => {
+    await queryClient.cancelQueries()
     await deleteItem(TOKEN_KEY)
     await deleteItem('ihz_user')
     set({ token: null, user: null })

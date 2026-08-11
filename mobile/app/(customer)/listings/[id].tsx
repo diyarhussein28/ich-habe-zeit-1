@@ -86,7 +86,11 @@ export default function ListingDetailScreen() {
 
         {/* Provider info */}
         {listing.provider && (
-          <View style={styles.providerCard}>
+          <TouchableOpacity
+            onPress={() => router.push(`/providers/${listing.provider!.id}`)}
+            activeOpacity={0.85}
+            style={styles.providerCard}
+          >
             <View style={styles.providerAvatar}>
               <Text style={styles.providerAvatarText}>
                 {listing.provider.user.displayName.charAt(0).toUpperCase()}
@@ -104,8 +108,9 @@ export default function ListingDetailScreen() {
               {listing.provider.bio ? (
                 <Text style={styles.providerBio} numberOfLines={3}>{listing.provider.bio}</Text>
               ) : null}
+              <Text style={styles.providerLink}>Profil ansehen →</Text>
             </View>
-          </View>
+          </TouchableOpacity>
         )}
 
         {/* Stats */}
@@ -175,6 +180,7 @@ const styles = StyleSheet.create({
   providerName: { fontSize: fontSize.md, fontWeight: fontWeight.semibold, color: colors.text },
   providerRating: { fontSize: fontSize.sm, color: colors.textSecondary, marginTop: 2 },
   providerBio: { fontSize: fontSize.sm, color: colors.textSecondary, marginTop: spacing.xs, lineHeight: 20 },
+  providerLink: { fontSize: fontSize.xs, color: colors.primary, fontWeight: fontWeight.semibold, marginTop: spacing.xs },
   viewCount: { fontSize: fontSize.xs, color: colors.textDisabled, textAlign: 'center' },
   bottomBar: {
     position: 'absolute', bottom: 0, left: 0, right: 0,

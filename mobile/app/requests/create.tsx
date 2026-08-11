@@ -11,16 +11,18 @@ import {
 import { useRouter, useLocalSearchParams } from 'expo-router'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Button } from '../../../src/components/ui/Button'
-import { Input } from '../../../src/components/ui/Input'
-import { categoriesApi } from '../../../src/api/categories.api'
-import { requestsApi } from '../../../src/api/requests.api'
-import { getApiErrorMessage } from '../../../src/api/client'
-import { colors, spacing, fontSize, fontWeight, radius } from '../../../src/constants/theme'
+import { Button } from '../../src/components/ui/Button'
+import { Input } from '../../src/components/ui/Input'
+import { categoriesApi } from '../../src/api/categories.api'
+import { requestsApi } from '../../src/api/requests.api'
+import { getApiErrorMessage } from '../../src/api/client'
+import { useAuthStore } from '../../src/store/auth.store'
+import { colors, spacing, fontSize, fontWeight, radius } from '../../src/constants/theme'
 
 export default function CreateRequestScreen() {
   const router = useRouter()
   const qc = useQueryClient()
+  const user = useAuthStore((s) => s.user)
   const params = useLocalSearchParams<{ categoryId?: string; categoryName?: string }>()
 
   const [categoryId, setCategoryId] = useState(params.categoryId ?? '')
@@ -57,7 +59,15 @@ export default function CreateRequestScreen() {
     onSuccess: () => {
       setApiError(null)
       qc.invalidateQueries({ queryKey: ['my-requests'] })
-      router.replace('/(customer)/requests')
+      // Providers reach this screen from their own tabs (e.g. "+ Auftrag" in
+      // der Jobbörse) via this shared modal route — sending them into the
+      // customer tab group here would strand them there. Just dismiss back
+      // to wherever they came from. Customers land on their requests list.
+      if (user?.role === 'PROVIDER') {
+        router.back()
+      } else {
+        router.replace('/(customer)/requests')
+      }
     },
     onError: (err) => setApiError(getApiErrorMessage(err)),
   })

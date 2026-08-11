@@ -61,7 +61,7 @@ export default function MyRequestsScreen() {
       <View style={styles.header}>
         <Text style={styles.title}>Meine Aufträge</Text>
         <TouchableOpacity
-          onPress={() => router.push('/(customer)/requests/create')}
+          onPress={() => router.push('/requests/create')}
           style={styles.addBtn}
         >
           <Text style={styles.addBtnText}>+ Neu</Text>
@@ -82,7 +82,7 @@ export default function MyRequestsScreen() {
               <Text style={styles.emptyText}>Erstelle deinen ersten Auftrag und finde den passenden Dienstleister.</Text>
               <Button
                 label="Auftrag erstellen"
-                onPress={() => router.push('/(customer)/requests/create')}
+                onPress={() => router.push('/requests/create')}
                 style={styles.emptyBtn}
               />
             </View>

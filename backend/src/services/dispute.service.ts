@@ -7,6 +7,7 @@ import {
 } from './stripe.service.js'
 import { generateInvoicesForOrder } from './invoice.service.js'
 import { notifyEvent } from './notification.service.js'
+import { broadcastOrderEvent } from '../ws/chat.gateway.js'
 
 async function notifyBothParties(orderId: string, opts: { title: string; body: string; pushType: 'DISPUTE_OPENED' | 'DISPUTE_UPDATE' }) {
   const order = await prisma.order.findUnique({
@@ -26,6 +27,7 @@ export async function openDispute(data: {
   openedByUserId: string
   reasonCategory: string
   description: string
+  intakeAnswers?: { key: string; question: string; answer: string }[]
 }) {
   const order = await prisma.order.findUnique({
     where: { id: data.orderId },
@@ -54,6 +56,7 @@ export async function openDispute(data: {
         openedById: data.openedByUserId,
         reasonCategory: data.reasonCategory,
         description: data.description,
+        intakeAnswers: data.intakeAnswers ?? undefined,
         status: 'OPEN',
       },
     })
@@ -93,6 +96,7 @@ export async function openDispute(data: {
     title: 'Streitfall eröffnet',
     body: 'Ein Streitfall wurde eröffnet. Die Zahlung ist bis zur Entscheidung eingefroren.',
   })
+  broadcastOrderEvent(data.orderId, { type: 'dispute_updated', disputeId: result.id })
 
   return result
 }
@@ -169,7 +173,7 @@ export async function addEvidence(data: {
   })
   if (existing + data.files.length > 10) throw new Error('EVIDENCE_LIMIT_EXCEEDED')
 
-  return prisma.disputeEvidence.createMany({
+  const created = await prisma.disputeEvidence.createMany({
     data: data.files.map((f) => ({
       disputeId: data.disputeId,
       side: data.side,
@@ -180,6 +184,51 @@ export async function addEvidence(data: {
       fileSizeBytes: f.fileSizeBytes,
     })),
   })
+
+  broadcastOrderEvent(dispute.orderId, { type: 'dispute_updated', disputeId: data.disputeId })
+  return created
+}
+
+// The party who did NOT open the dispute submits a structured statement
+// (agree/disagree + description) before admin review — mirrors how
+// Fiverr/Upwork require both sides to state their case.
+export async function respondToDispute(data: {
+  disputeId: string
+  respondingUserId: string
+  agrees: boolean
+  description: string
+}) {
+  const dispute = await prisma.dispute.findUnique({
+    where: { id: data.disputeId },
+    include: { order: { include: { offer: { include: { provider: true } } } } },
+  })
+  if (!dispute) throw new Error('DISPUTE_NOT_FOUND')
+  if (dispute.status === 'RESOLVED') throw new Error('ALREADY_RESOLVED')
+
+  const isCustomer = dispute.order.customerId === data.respondingUserId
+  const isProvider = dispute.order.offer.provider.userId === data.respondingUserId
+  if (!isCustomer && !isProvider) throw new Error('FORBIDDEN')
+  if (data.respondingUserId === dispute.openedById) throw new Error('OPENER_CANNOT_RESPOND')
+  if (dispute.respondedById) throw new Error('ALREADY_RESPONDED')
+
+  const updated = await prisma.dispute.update({
+    where: { id: data.disputeId },
+    data: {
+      respondedById: data.respondingUserId,
+      responseAgreesWithClaim: data.agrees,
+      responseDescription: data.description,
+      respondedAt: new Date(),
+    },
+  })
+
+  await notifyBothParties(dispute.orderId, {
+    pushType: 'DISPUTE_UPDATE',
+    title: 'Antwort auf Streitfall eingegangen',
+    body: 'Die Gegenseite hat auf den Streitfall geantwortet. Unser Team prüft den Fall.',
+  })
+  broadcastOrderEvent(dispute.orderId, { type: 'dispute_updated', disputeId: data.disputeId })
+
+  return updated
 }
 
 export async function resolveDispute(data: {
@@ -202,7 +251,7 @@ export async function resolveDispute(data: {
   // and return before touching Stripe or computing amounts.
   if (data.outcome === 'REWORK_AGREEMENT' || data.outcome === 'ESCALATED') {
     const result = await prisma.$transaction(async (tx) => {
-      await tx.dispute.update({
+      const updated = await tx.dispute.update({
         where: { id: data.disputeId },
         data: {
           status: 'RESOLVED',
@@ -230,7 +279,7 @@ export async function resolveDispute(data: {
         },
       })
 
-      return dispute
+      return updated
     })
 
     await notifyBothParties(order.id, {
@@ -241,6 +290,7 @@ export async function resolveDispute(data: {
           ? 'Beide Parteien haben sich auf eine Nachbesserung geeinigt. Der Auftrag läuft weiter.'
           : 'Der Streitfall wurde an die externe Schlichtungsstelle weitergeleitet.',
     })
+    broadcastOrderEvent(order.id, { type: 'dispute_updated', disputeId: data.disputeId })
 
     return result
   }
@@ -282,7 +332,7 @@ export async function resolveDispute(data: {
   }
 
   const result = await prisma.$transaction(async (tx) => {
-    await tx.dispute.update({
+    const updated = await tx.dispute.update({
       where: { id: data.disputeId },
       data: {
         status: 'RESOLVED',
@@ -332,7 +382,7 @@ export async function resolveDispute(data: {
       })
     }
 
-    return dispute
+    return updated
   })
 
   // Auftraggeber/Dienstleister invoices for whatever was actually retained
@@ -346,6 +396,7 @@ export async function resolveDispute(data: {
     title: 'Streitfall-Entscheidung',
     body: `Der Streitfall wurde entschieden: ${data.outcome.replace(/_/g, ' ')}.`,
   })
+  broadcastOrderEvent(order.id, { type: 'dispute_updated', disputeId: data.disputeId })
 
   return result
 }

@@ -17,6 +17,9 @@ import { SafeAreaView } from 'react-native-safe-area-context'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { ordersApi } from '../../../src/api/orders.api'
 import { ratingsApi } from '../../../src/api/ratings.api'
+import { DisputeModal } from '../../../src/components/DisputeModal'
+import { RatingButton } from '../../../src/components/RatingButton'
+import { useOrderLiveSync } from '../../../src/hooks/useOrderLiveSync'
 import { Card } from '../../../src/components/ui/Card'
 import { Badge } from '../../../src/components/ui/Badge'
 import { Button } from '../../../src/components/ui/Button'
@@ -50,6 +53,8 @@ export default function ProviderOrderDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>()
   const router = useRouter()
   const qc = useQueryClient()
+  useOrderLiveSync(id)
+  const [showDisputeModal, setShowDisputeModal] = useState(false)
   const [showRatingModal, setShowRatingModal] = useState(false)
   const [rating, setRating] = useState(0)
   const [ratingComment, setRatingComment] = useState('')
@@ -77,6 +82,7 @@ export default function ProviderOrderDetailScreen() {
     mutationFn: () => ratingsApi.submit(id, { rating, comment: ratingComment.trim() || undefined }),
     onSuccess: () => {
       setShowRatingModal(false)
+      qc.invalidateQueries({ queryKey: ['my-rating', id] })
       Alert.alert('Bewertung gespeichert', 'Vielen Dank für deine Bewertung!')
     },
     onError: (err) => Alert.alert('Fehler', getApiErrorMessage(err)),
@@ -125,9 +131,9 @@ export default function ProviderOrderDetailScreen() {
         {/* Earnings */}
         <Card style={[styles.card, styles.earningsCard]}>
           <Text style={styles.earningsLabel}>Deine Auszahlung</Text>
-          <Text style={styles.earningsAmount}>{formatEur(order.providerAmount ?? 0)}</Text>
+          <Text style={styles.earningsAmount}>{formatEur(order.netProviderAmount ?? order.providerAmount ?? 0)}</Text>
           <Text style={styles.earningsNote}>
-            (nach Plattformgebühr {formatEur(order.platformFee ?? 0)})
+            (nach Plattformgebühr {formatEur(order.commissionAmount ?? order.platformFee ?? 0)})
           </Text>
         </Card>
 
@@ -155,12 +161,14 @@ export default function ProviderOrderDetailScreen() {
 
         {/* Dispute info */}
         {order.status === 'DISPUTED' && (
-          <Card style={[styles.card, styles.disputeCard]}>
-            <Text style={styles.disputeTitle}>⚠️ Streitfall aktiv</Text>
-            <Text style={styles.disputeText}>
-              Dieser Auftrag wird von unserem Team geprüft. Bitte reiche alle relevanten Beweise im Chat ein.
-            </Text>
-          </Card>
+          <TouchableOpacity onPress={() => router.push(`/disputes/${order.id}`)}>
+            <Card style={[styles.card, styles.disputeCard]}>
+              <Text style={styles.disputeTitle}>⚠️ Streitfall aktiv</Text>
+              <Text style={styles.disputeText}>
+                Dieser Auftrag wird von unserem Team geprüft. Tippe hier, um Details zu sehen und Beweise einzureichen.
+              </Text>
+            </Card>
+          </TouchableOpacity>
         )}
 
         {/* Actions */}
@@ -183,10 +191,21 @@ export default function ProviderOrderDetailScreen() {
         )}
 
         {order.status === 'RELEASED' && (
+          <View style={styles.actionBtn}>
+            <RatingButton
+              orderId={id}
+              eligible={order.status === 'RELEASED'}
+              targetRoleLabel="Auftraggeber"
+              onOpenRate={() => setShowRatingModal(true)}
+            />
+          </View>
+        )}
+
+        {['IN_PROGRESS', 'AWAITING_RELEASE'].includes(order.status) && (
           <Button
-            label="Auftraggeber bewerten"
-            variant="outline"
-            onPress={() => setShowRatingModal(true)}
+            label="Streitfall eröffnen"
+            variant="danger"
+            onPress={() => setShowDisputeModal(true)}
             style={styles.actionBtn}
           />
         )}
@@ -204,12 +223,20 @@ export default function ProviderOrderDetailScreen() {
         {/* Amounts breakdown */}
         <Card style={styles.card}>
           <Text style={styles.sectionLabel}>Zahlungsdetails</Text>
-          <AmountRow label="Angebotspreis" value={formatEur(order.totalAmount ?? 0)} />
-          <AmountRow label="Plattformgebühr" value={`- ${formatEur(order.platformFee ?? 0)}`} />
+          <AmountRow label="Angebotspreis" value={formatEur(order.grossAmount ?? order.totalAmount ?? 0)} />
+          <AmountRow label="Plattformgebühr" value={`- ${formatEur(order.commissionAmount ?? order.platformFee ?? 0)}`} />
           <View style={styles.divider} />
-          <AmountRow label="Netto-Auszahlung" value={formatEur(order.providerAmount ?? 0)} bold />
+          <AmountRow label="Netto-Auszahlung" value={formatEur(order.netProviderAmount ?? order.providerAmount ?? 0)} bold />
         </Card>
       </ScrollView>
+
+      <DisputeModal
+        orderId={id}
+        role="provider"
+        visible={showDisputeModal}
+        onClose={() => setShowDisputeModal(false)}
+        onSuccess={() => setShowDisputeModal(false)}
+      />
 
       {/* Rating modal */}
       <Modal visible={showRatingModal} animationType="slide" transparent onRequestClose={() => setShowRatingModal(false)}>

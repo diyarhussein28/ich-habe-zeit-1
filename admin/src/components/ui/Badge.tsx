@@ -55,6 +55,28 @@ export function OrderStatusBadge({ status }: { status: string }) {
   return <Badge label={cfg.label} variant={cfg.variant} />
 }
 
+export function DisputeStatusBadge({ status }: { status: string }) {
+  const map: Record<string, { label: string; variant: Variant }> = {
+    OPEN:              { label: 'Offen', variant: 'danger' },
+    IN_REVIEW:         { label: 'In Prüfung', variant: 'warning' },
+    PENDING_DECISION:  { label: 'Entscheidung ausstehend', variant: 'warning' },
+    RESOLVED:          { label: 'Gelöst', variant: 'success' },
+    ESCALATED:         { label: 'Eskaliert', variant: 'neutral' },
+  }
+  const cfg = map[status] ?? { label: status, variant: 'neutral' as Variant }
+  return <Badge label={cfg.label} variant={cfg.variant} />
+}
+
+export const DISPUTE_REASON_CATEGORY_LABEL: Record<string, string> = {
+  NOT_COMPLETED: 'Auftrag nicht abgeschlossen',
+  WORK_NOT_AS_AGREED: 'Arbeit entspricht nicht der Vereinbarung',
+  DAMAGE: 'Schaden entstanden',
+  NO_SHOW: 'Gegenseite nicht erschienen',
+  PAYMENT_ISSUE: 'Zahlungsproblem',
+  OTHER: 'Sonstiges',
+  CHARGEBACK: 'Rückbuchung (Chargeback)',
+}
+
 export function RoleBadge({ role }: { role: string }) {
   const map: Record<string, { label: string; variant: Variant }> = {
     CUSTOMER:  { label: 'Auftraggeber', variant: 'info' },

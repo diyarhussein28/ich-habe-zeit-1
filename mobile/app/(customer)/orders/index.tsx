@@ -6,7 +6,6 @@ import {
   TouchableOpacity,
   StyleSheet,
   RefreshControl,
-  ScrollView,
 } from 'react-native'
 import { useQuery } from '@tanstack/react-query'
 import { useRouter } from 'expo-router'
@@ -18,6 +17,7 @@ import { colors, spacing, fontSize, fontWeight } from '../../../src/constants/th
 import { formatEur } from '../../../src/utils/currency'
 import type { Order } from '../../../src/api/types'
 import { formatDate } from '../../../src/utils/date'
+import { isActiveOrderStatus } from '../../../src/constants/orderStatus'
 
 const STATUS_LABEL: Record<string, string> = {
   AWAITING_PAYMENT: 'Zahlung ausstehend',
@@ -27,7 +27,9 @@ const STATUS_LABEL: Record<string, string> = {
   RELEASED: 'Abgerechnet',
   DISPUTED: 'Streitfall',
   REFUNDED: 'Erstattet',
+  PARTIALLY_RELEASED: 'Teilweise ausgezahlt',
   CANCELLED: 'Abgebrochen',
+  EXPIRED: 'Abgelaufen',
 }
 
 const STATUS_COLOR: Record<string, 'primary' | 'success' | 'warning' | 'error' | 'neutral'> = {
@@ -38,35 +40,26 @@ const STATUS_COLOR: Record<string, 'primary' | 'success' | 'warning' | 'error' |
   RELEASED: 'success',
   DISPUTED: 'error',
   REFUNDED: 'neutral',
+  PARTIALLY_RELEASED: 'success',
   CANCELLED: 'neutral',
+  EXPIRED: 'neutral',
 }
 
-const FILTERS: Array<{ key: string; label: string }> = [
-  { key: 'ALL', label: 'Alle' },
-  { key: 'ACTIVE', label: 'Aktiv' },
-  { key: 'AWAITING_RELEASE', label: 'Freigabe ausstehend' },
-  { key: 'RELEASED', label: 'Abgerechnet' },
-  { key: 'DISPUTED', label: 'Streitfall' },
-  { key: 'CANCELLED', label: 'Abgebrochen' },
-]
-
-const ACTIVE_STATUSES = ['AWAITING_PAYMENT', 'IN_PROGRESS', 'COMPLETED_BY_PROVIDER']
+type Tab = 'ACTIVE' | 'HISTORY'
 
 export default function CustomerOrdersScreen() {
   const router = useRouter()
-  const [filter, setFilter] = useState('ALL')
+  const [tab, setTab] = useState<Tab>('ACTIVE')
   const { data, isLoading, refetch } = useQuery({
     queryKey: ['customer-orders'],
-    queryFn: () => ordersApi.list({ limit: 50 }).then((r) => r.data),
+    queryFn: () => ordersApi.list({ limit: 50, perspective: 'customer' }).then((r) => r.data),
   })
 
   const orders = (data as unknown as { orders?: Order[] })?.orders ?? []
 
   const filteredOrders = useMemo(() => {
-    if (filter === 'ALL') return orders
-    if (filter === 'ACTIVE') return orders.filter((o) => ACTIVE_STATUSES.includes(o.status))
-    return orders.filter((o) => o.status === filter)
-  }, [orders, filter])
+    return orders.filter((o) => (tab === 'ACTIVE' ? isActiveOrderStatus(o.status) : !isActiveOrderStatus(o.status)))
+  }, [orders, tab])
 
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
@@ -74,17 +67,20 @@ export default function CustomerOrdersScreen() {
         <Text style={styles.title}>Buchungen</Text>
       </View>
 
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filterScroll} contentContainerStyle={styles.filterRow}>
-        {FILTERS.map((f) => (
-          <TouchableOpacity
-            key={f.key}
-            style={[styles.filterChip, filter === f.key && styles.filterChipActive]}
-            onPress={() => setFilter(f.key)}
-          >
-            <Text style={[styles.filterChipText, filter === f.key && styles.filterChipTextActive]}>{f.label}</Text>
-          </TouchableOpacity>
-        ))}
-      </ScrollView>
+      <View style={styles.tabRow}>
+        <TouchableOpacity
+          style={[styles.tab, tab === 'ACTIVE' && styles.tabActive]}
+          onPress={() => setTab('ACTIVE')}
+        >
+          <Text style={[styles.tabText, tab === 'ACTIVE' && styles.tabTextActive]}>Aktiv</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.tab, tab === 'HISTORY' && styles.tabActive]}
+          onPress={() => setTab('HISTORY')}
+        >
+          <Text style={[styles.tabText, tab === 'HISTORY' && styles.tabTextActive]}>Verlauf</Text>
+        </TouchableOpacity>
+      </View>
 
       <FlatList
         data={filteredOrders}
@@ -95,10 +91,14 @@ export default function CustomerOrdersScreen() {
         ListEmptyComponent={
           isLoading ? null : (
             <View style={styles.empty}>
-              <Text style={styles.emptyEmoji}>📦</Text>
-              <Text style={styles.emptyTitle}>Keine Buchungen</Text>
+              <Text style={styles.emptyEmoji}>{tab === 'ACTIVE' ? '✅' : '📦'}</Text>
+              <Text style={styles.emptyTitle}>
+                {tab === 'ACTIVE' ? 'Keine aktiven Buchungen' : 'Noch keine vergangenen Buchungen'}
+              </Text>
               <Text style={styles.emptyText}>
-                {filter === 'ALL' ? 'Hier siehst du deine aktiven und vergangenen Buchungen.' : 'Keine Buchungen in diesem Filter.'}
+                {tab === 'ACTIVE'
+                  ? 'Sobald du einen Auftrag buchst, erscheint er hier.'
+                  : 'Abgeschlossene und stornierte Buchungen landen hier.'}
               </Text>
             </View>
           )
@@ -139,12 +139,14 @@ const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.background },
   header: { paddingHorizontal: spacing.lg, paddingVertical: spacing.md },
   title: { fontSize: fontSize.xl, fontWeight: fontWeight.bold, color: colors.text },
-  filterScroll: { flexGrow: 0, flexShrink: 0 },
-  filterRow: { paddingHorizontal: spacing.lg, gap: spacing.xs, paddingBottom: spacing.sm, alignItems: 'center' },
-  filterChip: { paddingHorizontal: spacing.md, paddingVertical: spacing.xs, borderRadius: 999, borderWidth: 1, borderColor: colors.border, marginRight: spacing.xs, alignSelf: 'flex-start' },
-  filterChipActive: { backgroundColor: colors.primary, borderColor: colors.primary },
-  filterChipText: { fontSize: fontSize.xs, color: colors.textSecondary },
-  filterChipTextActive: { color: colors.textInverse, fontWeight: fontWeight.medium },
+  tabRow: {
+    flexDirection: 'row', marginHorizontal: spacing.lg, marginBottom: spacing.md,
+    backgroundColor: colors.surface, borderRadius: 999, borderWidth: 1, borderColor: colors.border, padding: 3,
+  },
+  tab: { flex: 1, alignItems: 'center', paddingVertical: spacing.sm, borderRadius: 999 },
+  tabActive: { backgroundColor: colors.primary },
+  tabText: { fontSize: fontSize.sm, fontWeight: fontWeight.semibold, color: colors.textSecondary },
+  tabTextActive: { color: colors.textInverse },
   list: { paddingHorizontal: spacing.lg, paddingBottom: spacing.xl },
   card: { marginBottom: spacing.md },
   cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: spacing.sm },

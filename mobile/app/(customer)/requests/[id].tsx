@@ -16,6 +16,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { requestsApi } from '../../../src/api/requests.api'
+import { requestChatApi } from '../../../src/api/requestChat.api'
 import { Card } from '../../../src/components/ui/Card'
 import { Badge } from '../../../src/components/ui/Badge'
 import { Button } from '../../../src/components/ui/Button'
@@ -74,6 +75,12 @@ export default function RequestDetailScreen() {
   const { data: offers, isLoading: offersLoading } = useQuery({
     queryKey: ['request-offers', id],
     queryFn: () => requestsApi.getOffers(id).then((r) => r.data.offers),
+    enabled: !!id && ['OPEN', 'OFFER_RECEIVED', 'AWAITING_PAYMENT'].includes(request?.status ?? ''),
+  })
+
+  const { data: chatThreads } = useQuery({
+    queryKey: ['request-chats', id],
+    queryFn: () => requestChatApi.listThreads(id).then((r) => r.data.chats),
     enabled: !!id && ['OPEN', 'OFFER_RECEIVED', 'AWAITING_PAYMENT'].includes(request?.status ?? ''),
   })
 
@@ -206,6 +213,39 @@ export default function RequestDetailScreen() {
             loading={cancelMutation.isPending}
             style={styles.actionBtn}
           />
+        )}
+
+        {/* Inquiries from providers, before they've made an offer */}
+        {showOffers && chatThreads && chatThreads.length > 0 && (
+          <View>
+            <Text style={styles.sectionTitle}>Fragen von Dienstleistern ({chatThreads.length})</Text>
+            {chatThreads.map((thread) => {
+              const lastMessage = thread.messages[0]
+              return (
+                <TouchableOpacity
+                  key={thread.id}
+                  onPress={() =>
+                    router.push({
+                      pathname: '/chat/request/[requestId]',
+                      params: {
+                        requestId: id,
+                        providerId: thread.providerId,
+                        otherPartyName: thread.provider.user.displayName,
+                      },
+                    })
+                  }
+                  activeOpacity={0.85}
+                >
+                  <Card style={styles.threadCard}>
+                    <Text style={styles.threadName}>{thread.provider.user.displayName}</Text>
+                    {lastMessage ? (
+                      <Text style={styles.threadPreview} numberOfLines={1}>{lastMessage.content}</Text>
+                    ) : null}
+                  </Card>
+                </TouchableOpacity>
+              )
+            })}
+          </View>
         )}
 
         {/* Offers section */}
@@ -507,6 +547,9 @@ const styles = StyleSheet.create({
   actionBtn: { marginBottom: spacing.sm },
   emptyOffers: { marginBottom: spacing.md },
   emptyOffersText: { fontSize: fontSize.sm, color: colors.textSecondary, lineHeight: 20, textAlign: 'center' },
+  threadCard: { marginBottom: spacing.sm },
+  threadName: { fontSize: fontSize.sm, fontWeight: fontWeight.semibold, color: colors.text, marginBottom: 2 },
+  threadPreview: { fontSize: fontSize.xs, color: colors.textSecondary },
   // Modal
   modalOverlay: { flex: 1, justifyContent: 'flex-end', backgroundColor: colors.overlay },
   modalSheet: { backgroundColor: colors.surface, borderTopLeftRadius: radius.xl, borderTopRightRadius: radius.xl, padding: spacing.lg, paddingBottom: spacing.xxl },

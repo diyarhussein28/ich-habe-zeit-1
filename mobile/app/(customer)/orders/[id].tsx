@@ -17,6 +17,9 @@ import { SafeAreaView } from 'react-native-safe-area-context'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { ordersApi } from '../../../src/api/orders.api'
 import { ratingsApi } from '../../../src/api/ratings.api'
+import { DisputeModal } from '../../../src/components/DisputeModal'
+import { RatingButton } from '../../../src/components/RatingButton'
+import { useOrderLiveSync } from '../../../src/hooks/useOrderLiveSync'
 import { Card } from '../../../src/components/ui/Card'
 import { Badge } from '../../../src/components/ui/Badge'
 import { Button } from '../../../src/components/ui/Button'
@@ -54,10 +57,10 @@ export default function CustomerOrderDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>()
   const router = useRouter()
   const qc = useQueryClient()
+  useOrderLiveSync(id)
   const { initPaymentSheet, presentPaymentSheet } = useStripe()
   const [showPayModal, setShowPayModal] = useState(false)
   const [showDisputeModal, setShowDisputeModal] = useState(false)
-  const [disputeReason, setDisputeReason] = useState('')
   const [showRatingModal, setShowRatingModal] = useState(false)
   const [rating, setRating] = useState(0)
   const [ratingComment, setRatingComment] = useState('')
@@ -126,20 +129,11 @@ export default function CustomerOrderDetailScreen() {
     onError: (err) => setReleaseError(getApiErrorMessage(err)),
   })
 
-  const disputeMutation = useMutation({
-    mutationFn: () => ordersApi.openDispute(id, disputeReason.trim()),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['order', id] })
-      setShowDisputeModal(false)
-      setDisputeReason('')
-    },
-    onError: (err) => Alert.alert('Fehler', getApiErrorMessage(err)),
-  })
-
   const ratingMutation = useMutation({
     mutationFn: () => ratingsApi.submit(id, { rating, comment: ratingComment.trim() || undefined }),
     onSuccess: () => {
       setShowRatingModal(false)
+      qc.invalidateQueries({ queryKey: ['my-rating', id] })
       Alert.alert('Bewertung gespeichert', 'Vielen Dank für deine Bewertung!')
     },
     onError: (err) => Alert.alert('Fehler', getApiErrorMessage(err)),
@@ -278,12 +272,23 @@ export default function CustomerOrderDetailScreen() {
         )}
 
         {order.status === 'RELEASED' && (
-          <Button
-            label="Dienstleister bewerten"
-            variant="outline"
-            onPress={() => setShowRatingModal(true)}
-            style={styles.actionBtn}
-          />
+          <View style={styles.actionBtn}>
+            <RatingButton
+              orderId={id}
+              eligible={order.status === 'RELEASED'}
+              targetRoleLabel="Dienstleister"
+              onOpenRate={() => setShowRatingModal(true)}
+            />
+          </View>
+        )}
+
+        {order.status === 'DISPUTED' && (
+          <TouchableOpacity
+            onPress={() => router.push(`/disputes/${order.id}`)}
+            style={styles.chatLink}
+          >
+            <Text style={styles.chatLinkText}>⚠️ Streitfall ansehen</Text>
+          </TouchableOpacity>
         )}
 
         {/* Chat link */}
@@ -335,44 +340,13 @@ export default function CustomerOrderDetailScreen() {
         </View>
       </Modal>
 
-      {/* Dispute modal */}
-      <Modal visible={showDisputeModal} animationType="slide" transparent onRequestClose={() => setShowDisputeModal(false)}>
-        <KeyboardAvoidingView style={styles.modalOverlay} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-          <View style={styles.modalSheet}>
-            <Text style={styles.modalTitle}>Streitfall eröffnen</Text>
-            <Text style={styles.modalSubtitle}>
-              Beschreibe das Problem. Unser Team wird sich innerhalb von 24 Stunden melden.
-            </Text>
-            <TextInput
-              style={styles.disputeInput}
-              value={disputeReason}
-              onChangeText={setDisputeReason}
-              placeholder="Was ist das Problem? Bitte sei so genau wie möglich..."
-              placeholderTextColor={colors.textDisabled}
-              multiline
-              numberOfLines={4}
-              textAlignVertical="top"
-            />
-            <View style={styles.modalActions}>
-              <Button label="Abbrechen" variant="outline" onPress={() => setShowDisputeModal(false)} fullWidth={false} style={styles.modalBtn} />
-              <Button
-                label="Einreichen"
-                variant="danger"
-                onPress={() => {
-                  if (!disputeReason.trim() || disputeReason.trim().length < 10) {
-                    Alert.alert('Fehler', 'Bitte beschreibe das Problem (mindestens 10 Zeichen).')
-                    return
-                  }
-                  disputeMutation.mutate()
-                }}
-                loading={disputeMutation.isPending}
-                fullWidth={false}
-                style={styles.modalBtn}
-              />
-            </View>
-          </View>
-        </KeyboardAvoidingView>
-      </Modal>
+      <DisputeModal
+        orderId={id}
+        role="customer"
+        visible={showDisputeModal}
+        onClose={() => setShowDisputeModal(false)}
+        onSuccess={() => setShowDisputeModal(false)}
+      />
 
       {/* Rating modal */}
       <Modal visible={showRatingModal} animationType="slide" transparent onRequestClose={() => setShowRatingModal(false)}>

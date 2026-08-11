@@ -121,3 +121,90 @@ export async function getMessages(orderId: string, userId: string, limit = 50, b
 
   return messages.reverse()
 }
+
+// ─── Pre-offer inquiry chat (ServiceRequest, before any order exists) ─────────
+// One thread per (request, provider) pair — a customer's request can have a
+// separate conversation with each interested provider.
+
+async function authorizeRequestChat(requestId: string, providerId: string, userId: string) {
+  const request = await prisma.serviceRequest.findUnique({
+    where: { id: requestId },
+    include: { customer: true },
+  })
+  if (!request) throw new Error('REQUEST_NOT_FOUND')
+
+  const provider = await prisma.providerProfile.findUnique({ where: { id: providerId } })
+  if (!provider) throw new Error('PROVIDER_NOT_FOUND')
+
+  const isCustomer = request.customer.userId === userId
+  const isThisProvider = provider.userId === userId
+  if (!isCustomer && !isThisProvider) throw new Error('FORBIDDEN')
+
+  return { request, provider, isCustomer, isThisProvider }
+}
+
+export async function getOrCreateRequestChat(requestId: string, providerId: string, userId: string) {
+  await authorizeRequestChat(requestId, providerId, userId)
+
+  let chat = await prisma.chat.findUnique({
+    where: { requestId_providerId: { requestId, providerId } },
+  })
+  if (!chat) chat = await prisma.chat.create({ data: { requestId, providerId } })
+
+  return prisma.chat.findUnique({
+    where: { id: chat.id },
+    include: {
+      messages: { include: { attachments: true }, orderBy: { createdAt: 'asc' }, take: 100 },
+    },
+  })
+}
+
+export async function sendRequestMessage(
+  requestId: string,
+  providerId: string,
+  senderId: string,
+  content: string
+) {
+  await authorizeRequestChat(requestId, providerId, senderId)
+  enforceRateLimit(senderId)
+
+  if (CONTACT_REGEX.test(content)) {
+    await prisma.auditLog.create({
+      data: {
+        userId: senderId,
+        actionType: 'CHAT_CONTACT_SHARING_DETECTED',
+        targetEntity: 'ServiceRequest',
+        targetId: requestId,
+        metadata: { content: content.substring(0, 200) },
+      },
+    })
+  }
+
+  let chat = await prisma.chat.findUnique({
+    where: { requestId_providerId: { requestId, providerId } },
+  })
+  if (!chat) chat = await prisma.chat.create({ data: { requestId, providerId } })
+
+  return prisma.chatMessage.create({
+    data: { chatId: chat.id, senderId, content },
+    include: { attachments: true },
+  })
+}
+
+export async function getRequestMessages(requestId: string, providerId: string, userId: string, limit = 50) {
+  await authorizeRequestChat(requestId, providerId, userId)
+
+  const chat = await prisma.chat.findUnique({
+    where: { requestId_providerId: { requestId, providerId } },
+  })
+  if (!chat) return []
+
+  const messages = await prisma.chatMessage.findMany({
+    where: { chatId: chat.id },
+    include: { attachments: true },
+    orderBy: { createdAt: 'asc' },
+    take: limit,
+  })
+
+  return messages
+}

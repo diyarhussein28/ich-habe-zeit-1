@@ -6,7 +6,6 @@ export default function RequestsStack() {
     <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.background } }}>
       <Stack.Screen name="index" />
       <Stack.Screen name="[id]" />
-      <Stack.Screen name="create" />
     </Stack>
   )
 }

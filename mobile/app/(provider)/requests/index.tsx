@@ -45,7 +45,7 @@ export default function ProviderRequestsScreen() {
         </TouchableOpacity>
         <Text style={styles.title}>Meine Anfragen</Text>
         <TouchableOpacity
-          onPress={() => router.push('/(customer)/requests/create')}
+          onPress={() => router.push('/requests/create')}
           style={styles.addBtn}
         >
           <Text style={styles.addBtnText}>+ Neu</Text>

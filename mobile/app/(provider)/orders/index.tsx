@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useMemo } from 'react'
 import {
   View,
   Text,
@@ -18,6 +18,7 @@ import { getApiErrorMessage } from '../../../src/api/client'
 import { colors, spacing, fontSize, fontWeight } from '../../../src/constants/theme'
 import { formatEur } from '../../../src/utils/currency'
 import type { Order } from '../../../src/api/types'
+import { isActiveOrderStatus } from '../../../src/constants/orderStatus'
 
 const STATUS_LABEL: Record<string, string> = {
   AWAITING_PAYMENT: 'Zahlung ausstehend',
@@ -26,7 +27,10 @@ const STATUS_LABEL: Record<string, string> = {
   AWAITING_RELEASE: 'Freigabe ausstehend',
   RELEASED: 'Abgerechnet',
   DISPUTED: 'Streitfall',
+  PARTIALLY_RELEASED: 'Teilweise ausgezahlt',
+  REFUNDED: 'Erstattet',
   CANCELLED: 'Abgebrochen',
+  EXPIRED: 'Abgelaufen',
 }
 
 const STATUS_COLOR: Record<string, 'primary' | 'success' | 'warning' | 'error' | 'neutral'> = {
@@ -36,18 +40,24 @@ const STATUS_COLOR: Record<string, 'primary' | 'success' | 'warning' | 'error' |
   AWAITING_RELEASE: 'warning',
   RELEASED: 'success',
   DISPUTED: 'error',
+  PARTIALLY_RELEASED: 'success',
+  REFUNDED: 'neutral',
   CANCELLED: 'neutral',
+  EXPIRED: 'neutral',
 }
+
+type Tab = 'ACTIVE' | 'HISTORY'
 
 export default function ProviderOrdersScreen() {
   const router = useRouter()
   const qc = useQueryClient()
+  const [tab, setTab] = useState<Tab>('ACTIVE')
   const [confirmId, setConfirmId] = useState<string | null>(null)
   const [completeError, setCompleteError] = useState<string | null>(null)
 
   const { data, isLoading, refetch } = useQuery({
     queryKey: ['provider-orders'],
-    queryFn: () => ordersApi.list({ limit: 50 }).then((r) => r.data),
+    queryFn: () => ordersApi.list({ limit: 50, perspective: 'provider' }).then((r) => r.data),
   })
 
   const completeMutation = useMutation({
@@ -60,12 +70,31 @@ export default function ProviderOrdersScreen() {
     onError: (err) => setCompleteError(getApiErrorMessage(err)),
   })
 
-  const orders = (data as unknown as { orders?: Order[] })?.orders ?? []
+  const allOrders = (data as unknown as { orders?: Order[] })?.orders ?? []
+  const orders = useMemo(
+    () => allOrders.filter((o) => (tab === 'ACTIVE' ? isActiveOrderStatus(o.status) : !isActiveOrderStatus(o.status))),
+    [allOrders, tab]
+  )
 
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
       <View style={styles.header}>
         <Text style={styles.title}>Meine Aufträge</Text>
+      </View>
+
+      <View style={styles.tabRow}>
+        <TouchableOpacity
+          style={[styles.tab, tab === 'ACTIVE' && styles.tabActive]}
+          onPress={() => setTab('ACTIVE')}
+        >
+          <Text style={[styles.tabText, tab === 'ACTIVE' && styles.tabTextActive]}>Aktiv</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.tab, tab === 'HISTORY' && styles.tabActive]}
+          onPress={() => setTab('HISTORY')}
+        >
+          <Text style={[styles.tabText, tab === 'HISTORY' && styles.tabTextActive]}>Verlauf</Text>
+        </TouchableOpacity>
       </View>
 
       {confirmId ? (
@@ -98,9 +127,15 @@ export default function ProviderOrdersScreen() {
         ListEmptyComponent={
           isLoading ? null : (
             <View style={styles.empty}>
-              <Text style={styles.emptyEmoji}>🔧</Text>
-              <Text style={styles.emptyTitle}>Keine Aufträge</Text>
-              <Text style={styles.emptyText}>Du hast aktuell keine aktiven Aufträge.</Text>
+              <Text style={styles.emptyEmoji}>{tab === 'ACTIVE' ? '🔧' : '📦'}</Text>
+              <Text style={styles.emptyTitle}>
+                {tab === 'ACTIVE' ? 'Keine aktiven Aufträge' : 'Noch keine vergangenen Aufträge'}
+              </Text>
+              <Text style={styles.emptyText}>
+                {tab === 'ACTIVE'
+                  ? 'Sobald du ein Angebot gewinnst, erscheint der Auftrag hier.'
+                  : 'Abgeschlossene und stornierte Aufträge landen hier.'}
+              </Text>
             </View>
           )
         }
@@ -160,6 +195,14 @@ const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.background },
   header: { paddingHorizontal: spacing.lg, paddingVertical: spacing.md },
   title: { fontSize: fontSize.xl, fontWeight: fontWeight.bold, color: colors.text },
+  tabRow: {
+    flexDirection: 'row', marginHorizontal: spacing.lg, marginBottom: spacing.md,
+    backgroundColor: colors.surface, borderRadius: 999, borderWidth: 1, borderColor: colors.border, padding: 3,
+  },
+  tab: { flex: 1, alignItems: 'center', paddingVertical: spacing.sm, borderRadius: 999 },
+  tabActive: { backgroundColor: colors.primary },
+  tabText: { fontSize: fontSize.sm, fontWeight: fontWeight.semibold, color: colors.textSecondary },
+  tabTextActive: { color: colors.textInverse },
   list: { paddingHorizontal: spacing.lg, paddingBottom: spacing.xl },
   card: { marginBottom: spacing.md },
   cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: spacing.sm },

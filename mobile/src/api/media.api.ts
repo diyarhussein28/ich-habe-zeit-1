@@ -1,6 +1,6 @@
 import { apiClient } from './client'
 
-export type MediaContext = 'PROFILE_PHOTO' | 'SERVICE_PHOTO' | 'REQUEST_PHOTO' | 'COMPLETION_PHOTO'
+export type MediaContext = 'PROFILE_PHOTO' | 'SERVICE_PHOTO' | 'REQUEST_PHOTO' | 'COMPLETION_PHOTO' | 'DISPUTE_EVIDENCE'
 
 export const mediaApi = {
   upload: async (context: MediaContext, uri: string, mimeType = 'image/jpeg'): Promise<string> => {

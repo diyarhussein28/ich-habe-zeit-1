@@ -53,10 +53,16 @@ export const adminApi = {
     api.get<PaginatedResponse<AdminDispute>>('/api/admin/disputes', { params }),
 
   getDispute: (id: string) =>
-    api.get<AdminDispute>(`/api/admin/disputes/${id}`),
+    api.get<{ dispute: AdminDispute }>(`/api/admin/disputes/${id}`),
 
-  resolveDispute: (id: string, outcome: DisputeOutcome, notes: string, providerAmount?: number) =>
-    api.post<AdminDispute>(`/api/admin/disputes/${id}/resolve`, { outcome, notes, providerAmount }),
+  assignDispute: (id: string, assignedToId: string) =>
+    api.patch<{ dispute: AdminDispute }>(`/api/admin/disputes/${id}/assign`, { assignedToId }),
+
+  recommendDispute: (id: string, recommendation: DisputeOutcome, note: string) =>
+    api.patch<{ dispute: AdminDispute }>(`/api/admin/disputes/${id}/recommend`, { recommendation, note }),
+
+  resolveDispute: (id: string, outcome: DisputeOutcome, resolutionNote: string, releasedAmount?: number) =>
+    api.post<{ dispute: AdminDispute }>(`/api/admin/disputes/${id}/resolve`, { outcome, resolutionNote, releasedAmount }),
 
   // ── Categories ─────────────────────────────────────────────────────────
   getCategories: () =>
