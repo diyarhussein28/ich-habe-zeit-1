@@ -1,9 +1,10 @@
-import type { FastifyInstance } from 'fastify'
+import type { FastifyInstance, FastifyRequest } from 'fastify'
 import { z } from 'zod'
 import * as authService from '../services/auth.service.js'
 import { checkLoginAllowed } from '../services/moderation.service.js'
 import { checkRateLimit } from '../lib/rateLimiter.js'
 import { requireAuth } from '../middleware/auth.middleware.js'
+import { env } from '../config/env.js'
 import { v4 as uuidv4 } from 'uuid'
 
 const registerSchema = z.object({
@@ -108,7 +109,22 @@ export async function authRoutes(app: FastifyInstance) {
   })
 
   // POST /auth/login
-  app.post('/login', async (request, reply) => {
+  // Login gets its own rate-limit bucket rather than sharing the global one.
+  // Sharing meant a session's ordinary polling (chat, notification badge,
+  // screen queries) could exhaust the budget and then lock the user out of
+  // signing back in after a logout. This budget is only ever spent by actual
+  // login attempts, so it can stay tight enough to blunt brute-forcing while
+  // never being drained by normal use. Keyed on IP because there is no
+  // authenticated user yet at this point.
+  app.post('/login', {
+    config: {
+      rateLimit: {
+        max: env.NODE_ENV === 'production' ? 20 : 200,
+        timeWindow: '1 minute',
+        keyGenerator: (request: FastifyRequest) => request.ip,
+      },
+    },
+  }, async (request, reply) => {
     const body = loginSchema.safeParse(request.body)
     if (!body.success) return reply.status(400).send({ error: 'VALIDATION_ERROR' })
 

@@ -51,12 +51,23 @@ export async function buildApp() {
     sign: { expiresIn: env.JWT_EXPIRES_IN as string },
   })
 
-  // Rate limiting — a single mobile session firing several concurrent screen
-  // queries (esp. right after login) can burst well past 100/min in dev; keep
-  // production strict but don't throttle local/dev testing.
+  // Rate limiting.
+  //
+  // Keyed per *user* when authenticated, falling back to IP for anonymous
+  // traffic. Keying on IP alone punished households: two testers on the same
+  // WiFi share one public IP, so they drained a single shared bucket and locked
+  // each other out.
+  //
+  // The cap also has to survive normal app behaviour: an open chat polls, the
+  // notification bell polls, and every screen fires several queries on mount.
+  // At 100/min a legitimate session exhausted its budget within minutes — and
+  // because /auth/login shared that same bucket, the symptom was being unable
+  // to log back in after logging out. Auth routes now get their own budget
+  // (see auth.routes.ts) so ordinary traffic can never lock a user out.
   await app.register(rateLimit, {
-    max: env.NODE_ENV === 'production' ? 100 : 2000,
+    max: env.NODE_ENV === 'production' ? 600 : 5000,
     timeWindow: '1 minute',
+    keyGenerator: (request) => request.userId ?? request.ip,
   })
 
   // Multipart (for KYC + media uploads)

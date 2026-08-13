@@ -5,13 +5,16 @@ import { colors, spacing, fontSize, fontWeight, radius } from '../../constants/t
 import { formatEur } from '../../utils/currency'
 import { formatDate } from '../../utils/date'
 
+// Labels stay short on purpose: the badge sits beside the card title, and a
+// long one ("Gegenangebot gesendet") wrapped onto a second line and pushed the
+// header out of shape.
 const STATUS_META: Record<OfferStatus, { label: string; color: string; bg: string }> = {
   PENDING: { label: 'Offen', color: colors.primary, bg: colors.primaryLight },
   ACCEPTED: { label: 'Angenommen', color: colors.secondary, bg: colors.secondaryLight },
   REJECTED: { label: 'Abgelehnt', color: colors.error, bg: colors.errorLight },
   WITHDRAWN: { label: 'Zurückgezogen', color: colors.textSecondary, bg: colors.background },
   EXPIRED: { label: 'Abgelaufen', color: colors.textSecondary, bg: colors.background },
-  COUNTERED: { label: 'Gegenangebot gesendet', color: colors.warning, bg: colors.warningLight },
+  COUNTERED: { label: 'Ersetzt', color: colors.warning, bg: colors.warningLight },
 }
 
 interface Props {
@@ -45,11 +48,13 @@ export function OfferCard({
   return (
     <View style={[styles.card, isOwn ? styles.cardOwn : styles.cardTheirs]}>
       <View style={styles.header}>
-        <Text style={styles.headerLabel}>
+        <Text style={styles.headerLabel} numberOfLines={1}>
           {offer.parentOfferId ? '🔁 Gegenangebot' : '📄 Angebot'}
         </Text>
-        <View style={[styles.badge, { backgroundColor: meta.bg }]}>
-          <Text style={[styles.badgeText, { color: meta.color }]}>{meta.label}</Text>
+        <View style={[styles.badge, { backgroundColor: meta.bg, borderColor: meta.color }]}>
+          <Text style={[styles.badgeText, { color: meta.color }]} numberOfLines={1}>
+            {meta.label}
+          </Text>
         </View>
       </View>
 
@@ -113,11 +118,29 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    gap: spacing.sm,
     marginBottom: spacing.sm,
   },
-  headerLabel: { fontSize: fontSize.xs, fontWeight: fontWeight.semibold, color: colors.textSecondary },
-  badge: { paddingHorizontal: spacing.sm, paddingVertical: 2, borderRadius: radius.full },
-  badgeText: { fontSize: 11, fontWeight: fontWeight.semibold },
+  headerLabel: {
+    flexShrink: 1,
+    fontSize: fontSize.xs,
+    fontWeight: fontWeight.semibold,
+    color: colors.textSecondary,
+    letterSpacing: 0.3,
+  },
+  badge: {
+    flexShrink: 0,
+    paddingHorizontal: spacing.sm + 2,
+    paddingVertical: 3,
+    borderRadius: radius.full,
+    borderWidth: 1,
+  },
+  badgeText: {
+    fontSize: 11,
+    fontWeight: fontWeight.bold,
+    letterSpacing: 0.3,
+    textTransform: 'uppercase',
+  },
   price: { fontSize: fontSize.xxl, fontWeight: fontWeight.bold, color: colors.text },
   scope: { fontSize: fontSize.sm, color: colors.text, lineHeight: 20, marginTop: spacing.xs },
   metaRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.md, marginTop: spacing.sm },
