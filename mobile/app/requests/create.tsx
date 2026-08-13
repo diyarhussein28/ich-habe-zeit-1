@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import {
   View,
   Text,
@@ -16,6 +16,8 @@ import { Input } from '../../src/components/ui/Input'
 import { categoriesApi } from '../../src/api/categories.api'
 import { requestsApi } from '../../src/api/requests.api'
 import { getApiErrorMessage } from '../../src/api/client'
+import { usePlzLookup } from '../../src/hooks/usePlzLookup'
+import { formatPlzInput } from '../../src/utils/inputFormat'
 import { useAuthStore } from '../../src/store/auth.store'
 import { colors, spacing, fontSize, fontWeight, radius } from '../../src/constants/theme'
 
@@ -34,6 +36,18 @@ export default function CreateRequestScreen() {
   const [errors, setErrors] = useState<Record<string, string>>({})
 
   const [apiError, setApiError] = useState<string | null>(null)
+
+  // Fill the city from the PLZ so the user doesn't have to type it. Tracked per
+  // PLZ so a manual correction survives re-renders but a new PLZ refills.
+  const { city: resolvedCity } = usePlzLookup(plz)
+  const autofilledFor = useRef<string | null>(null)
+  useEffect(() => {
+    if (resolvedCity && autofilledFor.current !== plz) {
+      autofilledFor.current = plz
+      setCity(resolvedCity)
+      setErrors((e) => ({ ...e, city: '' }))
+    }
+  }, [resolvedCity, plz])
 
   const { data: categories } = useQuery({
     queryKey: ['categories'],
@@ -144,7 +158,7 @@ export default function CreateRequestScreen() {
             <Input
               label="PLZ *"
               value={plz}
-              onChangeText={setPlz}
+              onChangeText={(v) => setPlz(formatPlzInput(v))}
               keyboardType="number-pad"
               placeholder="12345"
               maxLength={5}

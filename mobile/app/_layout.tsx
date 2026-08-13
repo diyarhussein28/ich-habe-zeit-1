@@ -44,7 +44,7 @@ function RootLayoutInner() {
       <Stack.Screen name="chat/request/[requestId]" />
       <Stack.Screen name="invoice-preview" options={{ presentation: 'modal' }} />
       <Stack.Screen name="notifications/index" />
-      <Stack.Screen name="chat" />
+      <Stack.Screen name="chat/[orderId]" />
       <Stack.Screen name="support" />
       <Stack.Screen name="addresses" />
       <Stack.Screen name="notification-settings" />

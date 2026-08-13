@@ -23,19 +23,11 @@ import { formatDate } from '../../../src/utils/date'
 import { LegalDocsAccordion } from '../../../src/components/LegalDocsAccordion'
 import { AccountDataActions } from '../../../src/components/AccountDataActions'
 import { ConfirmModal } from '../../../src/components/ui/ConfirmModal'
-
-// Converts "DD.MM.YYYY" to an ISO date string. Returns undefined for an empty
-// input (no change) or null for an unparsable one (caller should show an error).
-function parseGermanDate(input: string): string | undefined | null {
-  const trimmed = input.trim()
-  if (!trimmed) return undefined
-  const match = trimmed.match(/^(\d{2})\.(\d{2})\.(\d{4})$/)
-  if (!match) return null
-  const [, day, month, year] = match
-  const date = new Date(Number(year), Number(month) - 1, Number(day))
-  if (Number.isNaN(date.getTime())) return null
-  return date.toISOString()
-}
+import {
+  formatGermanDateInput,
+  parseGermanDate,
+  isPlausibleBirthDate,
+} from '../../../src/utils/inputFormat'
 
 const KYC_LABEL: Record<string, string> = {
   REGISTERED: 'Nicht verifiziert',
@@ -160,10 +152,11 @@ export default function CustomerProfileScreen() {
             <TextInput
               style={styles.textInput}
               value={dateOfBirth}
-              onChangeText={setDateOfBirth}
+              onChangeText={(v) => setDateOfBirth(formatGermanDateInput(v))}
               placeholder="TT.MM.JJJJ"
               placeholderTextColor={colors.textDisabled}
               keyboardType="number-pad"
+              maxLength={10}
             />
 
             {saveError ? (
@@ -188,8 +181,13 @@ export default function CustomerProfileScreen() {
                     setSaveError('Name darf nicht leer sein.')
                     return
                   }
-                  if (parseGermanDate(dateOfBirth) === null) {
+                  const parsedDob = parseGermanDate(dateOfBirth)
+                  if (parsedDob === null) {
                     setSaveError('Bitte gib das Geburtsdatum im Format TT.MM.JJJJ ein.')
+                    return
+                  }
+                  if (parsedDob && !isPlausibleBirthDate(parsedDob)) {
+                    setSaveError('Bitte gib ein gültiges Geburtsdatum ein.')
                     return
                   }
                   saveMutation.mutate()

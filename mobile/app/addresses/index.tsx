@@ -17,6 +17,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { profileApi, type Address } from '../../src/api/profile.api'
 import { ConfirmModal } from '../../src/components/ui/ConfirmModal'
 import { Button } from '../../src/components/ui/Button'
+import { PlzCityFields } from '../../src/components/ui/PlzCityFields'
 import { getApiErrorMessage } from '../../src/api/client'
 import { colors, spacing, fontSize, fontWeight, radius } from '../../src/constants/theme'
 
@@ -159,16 +160,14 @@ export default function AddressesScreen() {
             <Text style={styles.fieldLabel}>Straße & Hausnummer</Text>
             <TextInput style={styles.input} value={form.street} onChangeText={(v) => setForm((f) => ({ ...f, street: v }))} placeholder="Musterstraße 1" placeholderTextColor={colors.textDisabled} />
 
-            <View style={styles.row2}>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.fieldLabel}>PLZ</Text>
-                <TextInput style={styles.input} value={form.plz} onChangeText={(v) => setForm((f) => ({ ...f, plz: v }))} placeholder="10115" keyboardType="number-pad" maxLength={5} placeholderTextColor={colors.textDisabled} />
-              </View>
-              <View style={{ flex: 2 }}>
-                <Text style={styles.fieldLabel}>Stadt</Text>
-                <TextInput style={styles.input} value={form.city} onChangeText={(v) => setForm((f) => ({ ...f, city: v }))} placeholder="Berlin" placeholderTextColor={colors.textDisabled} />
-              </View>
-            </View>
+            <PlzCityFields
+              plz={form.plz}
+              city={form.city}
+              onChangePlz={(v) => setForm((f) => ({ ...f, plz: v }))}
+              onChangeCity={(v) => setForm((f) => ({ ...f, city: v }))}
+              inputStyle={styles.input}
+              labelStyle={styles.fieldLabel}
+            />
 
             {error ? <Text style={styles.errorText}>{error}</Text> : null}
 

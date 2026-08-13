@@ -15,6 +15,7 @@ import { Button } from '../../src/components/ui/Button'
 import { Input } from '../../src/components/ui/Input'
 import { authApi } from '../../src/api/auth.api'
 import { getApiErrorMessage } from '../../src/api/client'
+import { formatPhoneInput } from '../../src/utils/inputFormat'
 import { colors, spacing, fontSize, fontWeight, radius } from '../../src/constants/theme'
 import type { UserRole } from '../../src/api/types'
 
@@ -157,12 +158,12 @@ export default function RegisterScreen() {
           <Input
             label="Telefonnummer"
             value={form.phone}
-            onChangeText={set('phone')}
+            onChangeText={(v) => setForm((f) => ({ ...f, phone: formatPhoneInput(v) }))}
             keyboardType="phone-pad"
             autoComplete="tel"
-            placeholder="+49 151 23456789"
+            placeholder="+4915123456789"
             error={errors.phone}
-            hint="Mit Ländervorwahl, z.B. +49"
+            hint="Eine führende 0 wird automatisch zu +49"
           />
           <Input
             label="Passwort"
