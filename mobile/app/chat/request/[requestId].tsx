@@ -1,4 +1,4 @@
-import React, { useState, useRef, useCallback } from 'react'
+import React, { useState, useRef, useCallback, useMemo } from 'react'
 import {
   View,
   Text,
@@ -9,11 +9,21 @@ import {
   KeyboardAvoidingView,
   Platform,
   ActivityIndicator,
+  Alert,
 } from 'react-native'
 import { useLocalSearchParams, useRouter } from 'expo-router'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { requestChatApi, type RequestChatMessage } from '../../../src/api/requestChat.api'
+import { requestChatApi } from '../../../src/api/requestChat.api'
+import {
+  negotiationApi,
+  type NegotiationMessage,
+  type NegotiationOffer,
+} from '../../../src/api/negotiation.api'
+import { getApiErrorMessage } from '../../../src/api/client'
+import { OfferCard } from '../../../src/components/chat/OfferCard'
+import { OfferComposer, type OfferDraft } from '../../../src/components/chat/OfferComposer'
+import { ConfirmModal } from '../../../src/components/ui/ConfirmModal'
 import { useAuthStore } from '../../../src/store/auth.store'
 import { colors, spacing, fontSize, fontWeight, radius } from '../../../src/constants/theme'
 
@@ -31,41 +41,118 @@ export default function RequestChatScreen() {
   const [resolvedProviderId, setResolvedProviderId] = useState<string | null>(providerIdParam ?? null)
   const flatListRef = useRef<FlatList>(null)
 
+  // Offer composer state
+  const [composerOpen, setComposerOpen] = useState(false)
+  const [counterTarget, setCounterTarget] = useState<NegotiationOffer | null>(null)
+  const [composerError, setComposerError] = useState<string | null>(null)
+  const [confirmAccept, setConfirmAccept] = useState<NegotiationOffer | null>(null)
+  const [busyOfferId, setBusyOfferId] = useState<string | null>(null)
+
   const scrollToEnd = useCallback((animated = true) => {
     setTimeout(() => flatListRef.current?.scrollToEnd({ animated }), 80)
   }, [])
 
-  const { data: messages, isLoading } = useQuery({
-    queryKey: ['request-chat', requestId, providerIdParam ?? 'mine'],
+  // The provider's own thread is created lazily, so when no providerId was
+  // passed we first resolve it, then drive everything off the negotiation
+  // endpoint (which returns messages *and* live offer state together).
+  const { data: bootstrapProviderId } = useQuery({
+    queryKey: ['request-chat-bootstrap', requestId],
     queryFn: async () => {
-      if (providerIdParam) {
-        const res = await requestChatApi.getMessages(requestId, providerIdParam)
-        return res.data.messages
-      }
       const res = await requestChatApi.openMine(requestId)
       setResolvedProviderId(res.data.chat.providerId)
-      return res.data.chat.messages
+      return res.data.chat.providerId
     },
-    enabled: !!requestId,
+    enabled: !!requestId && !providerIdParam,
+  })
+
+  const providerId = providerIdParam ?? resolvedProviderId ?? bootstrapProviderId ?? null
+
+  const negotiationKey = ['negotiation', requestId, providerId] as const
+
+  const { data: negotiation, isLoading } = useQuery({
+    queryKey: negotiationKey,
+    queryFn: () => negotiationApi.get(requestId, providerId!).then((r) => r.data),
+    enabled: !!requestId && !!providerId,
     refetchInterval: 4000,
   })
 
+  const refresh = () => qc.invalidateQueries({ queryKey: negotiationKey })
+
   const sendMutation = useMutation({
-    mutationFn: (content: string) => requestChatApi.sendMessage(requestId, resolvedProviderId!, content),
+    mutationFn: (content: string) => requestChatApi.sendMessage(requestId, providerId!, content),
     onSuccess: () => {
       setText('')
-      qc.invalidateQueries({ queryKey: ['request-chat', requestId, providerIdParam ?? 'mine'] })
+      refresh()
       scrollToEnd()
     },
   })
 
+  const proposeMutation = useMutation({
+    mutationFn: (draft: OfferDraft) =>
+      negotiationApi.propose({
+        requestId,
+        providerId: providerId!,
+        ...draft,
+        parentOfferId: counterTarget?.id,
+      }),
+    onSuccess: () => {
+      setComposerOpen(false)
+      setCounterTarget(null)
+      setComposerError(null)
+      refresh()
+      scrollToEnd()
+    },
+    onError: (err) => setComposerError(getApiErrorMessage(err)),
+  })
+
+  const acceptMutation = useMutation({
+    mutationFn: (offerId: string) => negotiationApi.accept(offerId),
+    onSuccess: (res) => {
+      setConfirmAccept(null)
+      setBusyOfferId(null)
+      qc.invalidateQueries({ queryKey: ['my-requests'] })
+      qc.invalidateQueries({ queryKey: ['customer-orders'] })
+      refresh()
+      router.push(`/(customer)/orders/${res.data.order.id}`)
+    },
+    onError: (err) => {
+      setBusyOfferId(null)
+      setConfirmAccept(null)
+      Alert.alert('Annehmen fehlgeschlagen', getApiErrorMessage(err))
+    },
+  })
+
+  const declineMutation = useMutation({
+    mutationFn: (offerId: string) => negotiationApi.decline(offerId),
+    onSuccess: () => { setBusyOfferId(null); refresh() },
+    onError: (err) => { setBusyOfferId(null); Alert.alert('Fehler', getApiErrorMessage(err)) },
+  })
+
+  const withdrawMutation = useMutation({
+    mutationFn: (offerId: string) => negotiationApi.withdraw(offerId),
+    onSuccess: () => { setBusyOfferId(null); refresh() },
+    onError: (err) => { setBusyOfferId(null); Alert.alert('Fehler', getApiErrorMessage(err)) },
+  })
+
   const handleSend = () => {
     const trimmed = text.trim()
-    if (!trimmed || !resolvedProviderId || sendMutation.isPending) return
+    if (!trimmed || !providerId || sendMutation.isPending) return
     sendMutation.mutate(trimmed)
   }
 
+  const messages = negotiation?.messages ?? []
+  const viewerIsCustomer = negotiation?.viewerIsCustomer ?? false
+  const activeOffer = negotiation?.activeOffer ?? null
+
+  // Only one live offer at a time — while one is open the composer becomes
+  // "counter" instead of a second parallel proposal.
+  const canProposeFresh = !activeOffer
+
   const headerTitle = otherPartyName ?? title ?? 'Anfrage-Chat'
+  const headerSub = useMemo(() => {
+    if (activeOffer) return `Offenes Angebot: ${activeOffer.proposedPrice.toFixed(2)} €`
+    return viewerIsCustomer ? 'Verhandlung' : 'Anfrage vor Angebot'
+  }, [activeOffer, viewerIsCustomer])
 
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
@@ -75,7 +162,7 @@ export default function RequestChatScreen() {
         </TouchableOpacity>
         <View style={{ flex: 1 }}>
           <Text style={styles.headerTitle} numberOfLines={1}>{headerTitle}</Text>
-          <Text style={styles.headerSub} numberOfLines={1}>Anfrage vor Angebot</Text>
+          <Text style={styles.headerSub} numberOfLines={1}>{headerSub}</Text>
         </View>
       </View>
 
@@ -87,38 +174,68 @@ export default function RequestChatScreen() {
         ) : (
           <FlatList
             ref={flatListRef}
-            data={messages ?? []}
+            data={messages}
             keyExtractor={(item) => item.id}
             contentContainerStyle={styles.messageList}
             showsVerticalScrollIndicator={false}
             onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: false })}
             ListEmptyComponent={
               <View style={styles.emptyChat}>
+                <Text style={styles.emptyChatEmoji}>💬</Text>
+                <Text style={styles.emptyChatTitle}>Noch keine Nachrichten</Text>
                 <Text style={styles.emptyChatText}>
-                  Noch keine Nachrichten. Stelle deine Fragen, bevor du ein Angebot abgibst.
+                  Klärt offene Fragen und verhandelt den Preis direkt hier im Chat.
                 </Text>
               </View>
             }
             renderItem={({ item }) => (
-              <MessageBubble message={item} isOwn={item.senderId === user?.id} />
+              <ChatRow
+                message={item}
+                isOwn={item.senderId === user?.id}
+                currentUserId={user?.id}
+                viewerIsCustomer={viewerIsCustomer}
+                busyOfferId={busyOfferId}
+                onAccept={(offer) => setConfirmAccept(offer)}
+                onDecline={(offer) => { setBusyOfferId(offer.id); declineMutation.mutate(offer.id) }}
+                onWithdraw={(offer) => { setBusyOfferId(offer.id); withdrawMutation.mutate(offer.id) }}
+                onCounter={(offer) => {
+                  setCounterTarget(offer)
+                  setComposerError(null)
+                  setComposerOpen(true)
+                }}
+              />
             )}
           />
         )}
 
-        <View style={styles.inputRow}>
+        <View style={styles.composerBar}>
+          <TouchableOpacity
+            onPress={() => {
+              setCounterTarget(activeOffer ?? null)
+              setComposerError(null)
+              setComposerOpen(true)
+            }}
+            disabled={!providerId}
+            style={styles.offerBtn}
+          >
+            <Text style={styles.offerBtnText}>
+              {canProposeFresh ? '＋ Angebot' : '🔁 Gegenangebot'}
+            </Text>
+          </TouchableOpacity>
+
           <TextInput
             style={styles.input}
             value={text}
             onChangeText={setText}
-            placeholder="Frage stellen..."
+            placeholder="Nachricht schreiben..."
             placeholderTextColor={colors.textDisabled}
             multiline
             maxLength={2000}
           />
           <TouchableOpacity
             onPress={handleSend}
-            disabled={!text.trim() || sendMutation.isPending || !resolvedProviderId}
-            style={[styles.sendBtn, (!text.trim() || !resolvedProviderId) ? styles.sendBtnDisabled : null]}
+            disabled={!text.trim() || sendMutation.isPending || !providerId}
+            style={[styles.sendBtn, (!text.trim() || !providerId) ? styles.sendBtnDisabled : null]}
           >
             {sendMutation.isPending ? (
               <ActivityIndicator size="small" color={colors.textInverse} />
@@ -128,12 +245,82 @@ export default function RequestChatScreen() {
           </TouchableOpacity>
         </View>
       </KeyboardAvoidingView>
+
+      <OfferComposer
+        visible={composerOpen}
+        isCounter={!!counterTarget}
+        counteringPrice={counterTarget?.proposedPrice}
+        counteringScope={counterTarget?.scopeOfWork}
+        submitting={proposeMutation.isPending}
+        error={composerError}
+        onSubmit={(draft) => proposeMutation.mutate(draft)}
+        onCancel={() => {
+          setComposerOpen(false)
+          setCounterTarget(null)
+          setComposerError(null)
+        }}
+      />
+
+      <ConfirmModal
+        visible={!!confirmAccept}
+        title="Angebot annehmen?"
+        message={
+          confirmAccept
+            ? `Du nimmst das Angebot über ${confirmAccept.proposedPrice.toFixed(2)} € an. Der Betrag wird sicher auf einem Treuhandkonto gehalten und erst nach deiner Freigabe ausgezahlt.`
+            : ''
+        }
+        confirmLabel="Jetzt annehmen"
+        loading={acceptMutation.isPending}
+        onConfirm={() => {
+          if (!confirmAccept) return
+          setBusyOfferId(confirmAccept.id)
+          acceptMutation.mutate(confirmAccept.id)
+        }}
+        onCancel={() => setConfirmAccept(null)}
+      />
     </SafeAreaView>
   )
 }
 
-function MessageBubble({ message, isOwn }: { message: RequestChatMessage; isOwn: boolean }) {
-  if (message.isSystem) {
+function ChatRow({
+  message,
+  isOwn,
+  currentUserId,
+  viewerIsCustomer,
+  busyOfferId,
+  onAccept,
+  onDecline,
+  onCounter,
+  onWithdraw,
+}: {
+  message: NegotiationMessage
+  isOwn: boolean
+  currentUserId?: string
+  viewerIsCustomer: boolean
+  busyOfferId: string | null
+  onAccept: (offer: NegotiationOffer) => void
+  onDecline: (offer: NegotiationOffer) => void
+  onCounter: (offer: NegotiationOffer) => void
+  onWithdraw: (offer: NegotiationOffer) => void
+}) {
+  if (message.messageType === 'OFFER' && message.offer) {
+    const offer = message.offer
+    return (
+      <OfferCard
+        offer={offer}
+        isOwn={offer.proposedByUserId === currentUserId}
+        // Accepting creates the escrow order, which only the customer can do.
+        canAccept={viewerIsCustomer}
+        busy={busyOfferId === offer.id}
+        onAccept={() => onAccept(offer)}
+        onDecline={() => onDecline(offer)}
+        onCounter={() => onCounter(offer)}
+        onWithdraw={() => onWithdraw(offer)}
+      />
+    )
+  }
+
+  if (message.isSystem || message.messageType === 'SYSTEM') {
     return (
       <View style={bubbleStyles.systemRow}>
         <Text style={bubbleStyles.systemText}>{message.content}</Text>
@@ -184,17 +371,31 @@ const styles = StyleSheet.create({
   loadingContainer: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   messageList: { padding: spacing.md, flexGrow: 1 },
   emptyChat: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingTop: spacing.xxl, paddingHorizontal: spacing.xl },
+  emptyChatEmoji: { fontSize: 44, marginBottom: spacing.sm },
+  emptyChatTitle: { fontSize: fontSize.md, fontWeight: fontWeight.bold, color: colors.text, marginBottom: spacing.xs, textAlign: 'center' },
   emptyChatText: { fontSize: fontSize.sm, color: colors.textSecondary, textAlign: 'center', lineHeight: 20 },
-  inputRow: {
+  composerBar: {
     flexDirection: 'row', alignItems: 'flex-end', padding: spacing.md, paddingTop: spacing.sm,
     backgroundColor: colors.surface, borderTopWidth: 1, borderTopColor: colors.border, gap: spacing.sm,
   },
-  input: {
-    flex: 1, backgroundColor: colors.background, borderWidth: 1.5, borderColor: colors.border,
-    borderRadius: radius.xl, paddingHorizontal: spacing.md, paddingVertical: spacing.sm + 2,
-    fontSize: fontSize.md, color: colors.text, maxHeight: 120,
+  offerBtn: {
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 10,
+    borderRadius: radius.full,
+    borderWidth: 1,
+    borderColor: colors.primary,
+    backgroundColor: colors.primaryLight,
   },
-  sendBtn: { width: 42, height: 42, borderRadius: 21, backgroundColor: colors.primary, alignItems: 'center', justifyContent: 'center' },
+  offerBtnText: { fontSize: fontSize.xs, fontWeight: fontWeight.semibold, color: colors.primary },
+  input: {
+    flex: 1, maxHeight: 110, borderWidth: 1, borderColor: colors.border, borderRadius: radius.lg,
+    paddingHorizontal: spacing.md, paddingVertical: spacing.sm, fontSize: fontSize.md, color: colors.text,
+    backgroundColor: colors.background,
+  },
+  sendBtn: {
+    width: 44, height: 44, borderRadius: 22, backgroundColor: colors.primary,
+    alignItems: 'center', justifyContent: 'center',
+  },
   sendBtnDisabled: { backgroundColor: colors.textDisabled },
-  sendIcon: { fontSize: 20, color: colors.textInverse, fontWeight: fontWeight.bold },
+  sendIcon: { fontSize: 22, color: colors.textInverse, fontWeight: fontWeight.bold },
 })

@@ -24,6 +24,7 @@ import { mediaRoutes } from './routes/media.routes.js'
 import { providerRoutes } from './routes/provider.routes.js'
 import { customerRoutes } from './routes/customer.routes.js'
 import { geoRoutes } from './routes/geo.routes.js'
+import { negotiationRoutes } from './routes/negotiation.routes.js'
 import { chatGateway } from './ws/chat.gateway.js'
 import { PUBLIC_UPLOADS_DIR } from './services/media.service.js'
 
@@ -91,6 +92,7 @@ export async function buildApp() {
   await app.register(providerRoutes, { prefix: '/api/providers' })
   await app.register(customerRoutes, { prefix: '/api/customers' })
   await app.register(geoRoutes, { prefix: '/api/geo' })
+  await app.register(negotiationRoutes, { prefix: '/api/negotiations' })
 
   // Health check
   app.get('/health', async () => ({ status: 'ok', timestamp: new Date().toISOString() }))

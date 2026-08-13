@@ -61,6 +61,19 @@ enum OfferStatus {
   REJECTED
   WITHDRAWN
   EXPIRED
+  // Superseded by a counter-offer. Distinct from REJECTED so the chat can
+  // render "countered" differently from a flat decline, and so the
+  // negotiation chain stays readable.
+  COUNTERED
+}
+
+enum ChatMessageType {
+  TEXT
+  // A structured offer rendered as an interactive card in the chat thread,
+  // with accept / decline / counter actions.
+  OFFER
+  // Platform-generated status line (offer accepted, order started, …).
+  SYSTEM
 }
 
 enum DisputeStatus {
@@ -424,6 +437,20 @@ model Offer {
   validUntil       DateTime
   personalMessage  String?         @db.Text
 
+  // ─── In-chat negotiation ───────────────────────────────────────────────
+  // Offers are negotiable in the chat thread, Fiverr-style: either side can
+  // propose, and a counter creates a new Offer linked back to the one it
+  // supersedes. providerId still identifies *which* provider the negotiation
+  // is with; proposedByUserId records who actually made this particular
+  // proposal, since the customer can counter too.
+  proposedByUserId String?
+  parentOfferId    String?         @unique
+  parentOffer      Offer?          @relation("OfferCounter", fields: [parentOfferId], references: [id])
+  counterOffer     Offer?          @relation("OfferCounter")
+
+  // Set when the offer was surfaced as a chat message.
+  chatMessages     ChatMessage[]
+
   // Relations
   order            Order?
 
@@ -535,12 +562,21 @@ model ChatMessage {
   senderId    String
   content     String   @db.Text
   isSystem    Boolean  @default(false)
+
+  // OFFER messages render as an interactive card carrying the linked offer's
+  // live status, so the thread always reflects the current negotiation state
+  // rather than a stale snapshot of what the price was when it was sent.
+  messageType ChatMessageType @default(TEXT)
+  offerId     String?
+  offer       Offer?   @relation(fields: [offerId], references: [id])
+
   attachments ChatAttachment[]
   readAt      DateTime?
   createdAt   DateTime @default(now())
 
   @@index([chatId])
   @@index([senderId])
+  @@index([offerId])
 }
 
 model ChatAttachment {
