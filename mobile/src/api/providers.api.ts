@@ -26,7 +26,40 @@ export interface PublicProviderProfile {
   reviews: ProviderReview[]
 }
 
+export type ProviderSort = 'rating' | 'reviews' | 'newest'
+
+export interface ProviderSearchQuery {
+  q?: string
+  categoryId?: string
+  plz?: string
+  language?: string
+  minRating?: number
+  verifiedOnly?: boolean
+  availableOnly?: boolean
+  sort?: ProviderSort
+  limit?: number
+  offset?: number
+}
+
+export interface ProviderSearchResult {
+  id: string
+  displayName: string
+  profilePhotoUrl?: string
+  isVerified: boolean
+  bio?: string
+  languages: string[]
+  isAvailable: boolean
+  averageRating: number
+  totalReviews: number
+  listingCount: number
+  categories: { id: string; name: string; icon?: string; isVerified: boolean }[]
+  serviceAreas: { homePlz: string; radiusKm: number }[]
+}
+
 export const providersApi = {
   get: (id: string) =>
     apiClient.get<{ provider: PublicProviderProfile }>(`/api/providers/${id}`),
+
+  search: (params?: ProviderSearchQuery) =>
+    apiClient.get<{ items: ProviderSearchResult[]; total: number }>('/api/providers', { params }),
 }

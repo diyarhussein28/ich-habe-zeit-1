@@ -1,4 +1,5 @@
 import Fastify from 'fastify'
+import { ZodError } from 'zod'
 import cors from '@fastify/cors'
 import jwt from '@fastify/jwt'
 import helmet from '@fastify/helmet'
@@ -84,6 +85,29 @@ export async function buildApp() {
   // WebSocket
   await app.register(websocket)
   await app.register(chatGateway)
+
+  // Malformed input is the caller's mistake, not a server fault. Several routes
+  // validate query params with Zod's throwing `.parse`, which without this
+  // surfaced as an opaque 500 — e.g. `?minRating=99` on a 0–5 field. Catching
+  // ZodError centrally fixes every such route at once, including any added
+  // later, and matches the shape the safeParse routes already return.
+  //
+  // Must be registered before the route plugins: each `register` creates its
+  // own encapsulation context, and a handler added afterwards does not apply
+  // retroactively to contexts already created.
+  app.setErrorHandler((error, request, reply) => {
+    if (error instanceof ZodError) {
+      return reply.status(400).send({ error: 'VALIDATION_ERROR', details: error.flatten() })
+    }
+
+    const err = error as { statusCode?: number; code?: string; message?: string }
+    const statusCode = err.statusCode ?? 500
+    if (statusCode >= 500) {
+      request.log.error({ err: error }, 'Unhandled error')
+      return reply.status(statusCode).send({ error: 'INTERNAL_SERVER_ERROR' })
+    }
+    return reply.status(statusCode).send({ error: err.code ?? 'REQUEST_ERROR', message: err.message })
+  })
 
   // Routes
   await app.register(authRoutes, { prefix: '/api/auth' })

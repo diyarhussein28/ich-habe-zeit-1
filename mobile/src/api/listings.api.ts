@@ -25,12 +25,21 @@ export interface ServiceListing {
   }
 }
 
+export type ListingSort = 'newest' | 'price_asc' | 'price_desc' | 'rating' | 'distance'
+
 export interface ListingsQuery {
   categoryId?: string
   city?: string
   plz?: string
+  /** Server-side full-text search over title and description. */
+  q?: string
+  priceMin?: number
   priceMax?: number
   pricingModel?: 'FIXED_PRICE' | 'PER_HOUR'
+  minRating?: number
+  verifiedOnly?: boolean
+  availableOnly?: boolean
+  sort?: ListingSort
   limit?: number
   offset?: number
 }
