@@ -490,6 +490,13 @@ model Order {
   mangopayPayOutId    String?
   paymentStatus      PaymentStatus  @default(PENDING)
 
+  // ─── Agreed timeframe ──────────────────────────────────────────────────
+  // Copied from the accepted offer so the order carries its own schedule:
+  // the offer can later be superseded or expire, but what both sides actually
+  // agreed to must stay pinned to the order.
+  scheduledStartAt     DateTime?
+  expectedCompletionAt DateTime?
+
   // Completion
   completedAt      DateTime?
   completionPhotoUrls String[]
@@ -963,6 +970,11 @@ model ServiceListing {
   status       ListingStatus   @default(ACTIVE)
   viewCount    Int             @default(0)
 
+  // Optional tiered packages (Basic/Standard/Premium). A listing without any
+  // packages still works on its single `price` — packages are additive, so
+  // existing listings keep behaving exactly as before.
+  packages     ListingPackage[]
+
   createdAt    DateTime        @default(now())
   updatedAt    DateTime        @updatedAt
 
@@ -970,6 +982,34 @@ model ServiceListing {
   @@index([status])
   @@index([plz])
   @@index([providerId])
+}
+
+enum PackageTier {
+  BASIC
+  STANDARD
+  PREMIUM
+}
+
+model ListingPackage {
+  id           String         @id @default(uuid())
+  listingId    String
+  listing      ServiceListing @relation(fields: [listingId], references: [id], onDelete: Cascade)
+
+  tier         PackageTier
+  title        String         @db.VarChar(80)
+  description  String         @db.VarChar(1000)
+  price        Float
+  /** Working days until delivery — the headline promise on a package card. */
+  deliveryDays Int
+  /** Short bullet points ("2 Räume", "Material inklusive"). */
+  features     String[]
+
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+
+  // One package per tier per listing.
+  @@unique([listingId, tier])
+  @@index([listingId])
 }
 
 // ─── Moderation & Abuse Prevention ─────────────────────────────────────────────

@@ -36,6 +36,14 @@ export async function acceptOffer(offerId: string, customerUserId: string) {
     releaseDeadline.getHours() + env.DEFAULT_RELEASE_WINDOW_HOURS
   )
 
+  // Pin the agreed schedule onto the order. The offer stays the source of the
+  // agreement, but it can later be superseded or expire, so the order needs
+  // its own copy of what was actually promised.
+  const scheduledStartAt = offer.proposedDate
+  const expectedCompletionAt = offer.estimatedDurationHours
+    ? new Date(offer.proposedDate.getTime() + offer.estimatedDurationHours * 60 * 60 * 1000)
+    : null
+
   const order = await prisma.$transaction(async (tx) => {
     // Reject all other pending offers for this request
     await tx.offer.updateMany({
@@ -69,6 +77,8 @@ export async function acceptOffer(offerId: string, customerUserId: string) {
         vatOnCommission,
         netProviderAmount,
         releaseWindowHours: env.DEFAULT_RELEASE_WINDOW_HOURS,
+        scheduledStartAt,
+        expectedCompletionAt,
       },
     })
 
@@ -371,7 +381,29 @@ export async function getOrderById(orderId: string, userId: string) {
   const isProvider = order.offer.provider.userId === userId
   if (!isCustomer && !isProvider) throw new Error('FORBIDDEN')
 
-  return order
+  // Ratings are keyed by orderId but have no Prisma relation on Order, so they
+  // are fetched separately and flattened into the shape the order screens
+  // render (who wrote it, in which direction).
+  const ratingRows = await prisma.rating.findMany({
+    where: { orderId },
+    include: {
+      customerRater: { include: { user: { select: { displayName: true } } } },
+      providerRater: { include: { user: { select: { displayName: true } } } },
+    },
+    orderBy: { createdAt: 'desc' },
+  })
+
+  const ratings = ratingRows.map((r) => ({
+    id: r.id,
+    score: r.score,
+    comment: r.comment,
+    createdAt: r.createdAt,
+    direction: r.customerRaterId ? ('CUSTOMER_TO_PROVIDER' as const) : ('PROVIDER_TO_CUSTOMER' as const),
+    reviewerName:
+      r.customerRater?.user.displayName ?? r.providerRater?.user.displayName ?? 'Anonym',
+  }))
+
+  return { ...order, ratings }
 }
 
 export async function listOrdersForUser(userId: string, status?: OrderStatus) {

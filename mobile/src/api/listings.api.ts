@@ -1,9 +1,31 @@
 import { apiClient } from './client'
 
+export type PackageTier = 'BASIC' | 'STANDARD' | 'PREMIUM'
+
+export interface ListingPackage {
+  id: string
+  listingId: string
+  tier: PackageTier
+  title: string
+  description: string
+  price: number
+  deliveryDays: number
+  features: string[]
+}
+
+export interface PackageInput {
+  title: string
+  description: string
+  price: number
+  deliveryDays: number
+  features: string[]
+}
+
 export interface ServiceListing {
   id: string
   providerId: string
   categoryId: string
+  packages?: ListingPackage[]
   title: string
   description: string
   price: number
@@ -73,4 +95,13 @@ export const listingsApi = {
       `/api/listings/${id}/book`,
       preferredDate ? { preferredDate } : {},
     ),
+
+  getPackages: (id: string) =>
+    apiClient.get<{ packages: ListingPackage[] }>(`/api/listings/${id}/packages`),
+
+  savePackage: (id: string, tier: PackageTier, data: PackageInput) =>
+    apiClient.put<{ package: ListingPackage }>(`/api/listings/${id}/packages/${tier}`, data),
+
+  deletePackage: (id: string, tier: PackageTier) =>
+    apiClient.delete<{ deleted: boolean }>(`/api/listings/${id}/packages/${tier}`),
 }

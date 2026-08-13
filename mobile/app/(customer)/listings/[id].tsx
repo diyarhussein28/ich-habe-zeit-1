@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import {
   View,
   Text,
@@ -10,7 +10,8 @@ import {
 import { useLocalSearchParams, useRouter } from 'expo-router'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { SafeAreaView } from 'react-native-safe-area-context'
-import { listingsApi } from '../../../src/api/listings.api'
+import { listingsApi, type ListingPackage, type PackageTier } from '../../../src/api/listings.api'
+import { PackagePicker } from '../../../src/components/listings/PackagePicker'
 import { Button } from '../../../src/components/ui/Button'
 import { getApiErrorMessage } from '../../../src/api/client'
 import { colors, spacing, fontSize, fontWeight, radius } from '../../../src/constants/theme'
@@ -22,12 +23,22 @@ export default function ListingDetailScreen() {
   const qc = useQueryClient()
   const [bookError, setBookError] = useState<string | null>(null)
   const [booked, setBooked] = useState(false)
+  const [selectedTier, setSelectedTier] = useState<PackageTier | null>(null)
 
   const { data, isLoading } = useQuery({
     queryKey: ['listing', id],
     queryFn: () => listingsApi.getById(id!).then((r) => r.data.listing),
     enabled: !!id,
   })
+
+  const packages = data?.packages ?? []
+  const activePackage: ListingPackage | undefined = packages.find((p) => p.tier === selectedTier)
+
+  // Default to the cheapest tier so the price shown is never ambiguous once a
+  // listing defines packages.
+  useEffect(() => {
+    if (!selectedTier && packages.length > 0) setSelectedTier(packages[0].tier)
+  }, [packages, selectedTier])
 
   const bookMutation = useMutation({
     mutationFn: () => listingsApi.book(id!),
@@ -72,11 +83,21 @@ export default function ListingDetailScreen() {
         {/* Title + price */}
         <Text style={styles.title}>{listing.title}</Text>
         <View style={styles.priceRow}>
-          <Text style={styles.price}>{formatEur(listing.price)}</Text>
+          <Text style={styles.price}>{formatEur(activePackage?.price ?? listing.price)}</Text>
           <Text style={styles.priceUnit}>
-            {listing.pricingModel === 'PER_HOUR' ? ' / Stunde' : ' Festpreis'}
+            {activePackage
+              ? ' Paketpreis'
+              : listing.pricingModel === 'PER_HOUR'
+                ? ' / Stunde'
+                : ' Festpreis'}
           </Text>
         </View>
+
+        <PackagePicker
+          packages={packages}
+          selectedTier={selectedTier}
+          onSelect={(pkg) => setSelectedTier(pkg.tier)}
+        />
 
         {/* Description */}
         <View style={styles.section}>

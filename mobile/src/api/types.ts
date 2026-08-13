@@ -129,12 +129,26 @@ export interface Order {
   netProviderAmount?: number
   releasedAmount?: number
   releaseDeadline?: string
+  /** Agreed schedule, copied from the accepted offer when the order was created. */
+  scheduledStartAt?: string
+  expectedCompletionAt?: string
   completedAt?: string
   releasedAt?: string
   createdAt: string
   updatedAt: string
   request?: ServiceRequest
   offer?: Offer
+  ratings?: OrderRating[]
+}
+
+export interface OrderRating {
+  id: string
+  score: number
+  comment?: string
+  createdAt: string
+  /** Which side wrote it — the customer rating the provider, or vice versa. */
+  direction: 'CUSTOMER_TO_PROVIDER' | 'PROVIDER_TO_CUSTOMER'
+  reviewerName: string
 }
 
 export type DisputeStatus = 'OPEN' | 'IN_REVIEW' | 'PENDING_DECISION' | 'RESOLVED' | 'ESCALATED'

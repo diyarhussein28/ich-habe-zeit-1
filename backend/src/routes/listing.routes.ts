@@ -148,6 +148,7 @@ export async function listingRoutes(app: FastifyInstance) {
             ratings: { select: { score: true }, take: 10, orderBy: { createdAt: 'desc' } },
           },
         },
+        packages: { orderBy: { price: 'asc' } },
       },
     })
 
@@ -332,5 +333,85 @@ export async function listingRoutes(app: FastifyInstance) {
     })
 
     return reply.status(201).send({ order })
+  })
+
+  // ─── Packages ───────────────────────────────────────────────────────────
+  // Tiered packages let a Dienstleister publish what they offer at a glance
+  // (Basic / Standard / Premium) instead of a single opaque price. Optional:
+  // a listing with no packages keeps using its flat `price`.
+
+  const packageSchema = z.object({
+    tier: z.enum(['BASIC', 'STANDARD', 'PREMIUM']),
+    title: z.string().min(2).max(80),
+    description: z.string().min(5).max(1000),
+    price: z.number().positive(),
+    deliveryDays: z.number().int().min(1).max(365),
+    features: z.array(z.string().min(1).max(120)).max(10).default([]),
+  })
+
+  /**
+   * Returns null when the listing exists and belongs to the caller, otherwise
+   * the failure the route should reply with.
+   */
+  async function checkOwnListing(
+    listingId: string,
+    userId: string,
+  ): Promise<{ error: string; status: number } | null> {
+    const listing = await prisma.serviceListing.findUnique({
+      where: { id: listingId },
+      include: { provider: true },
+    })
+    if (!listing) return { error: 'LISTING_NOT_FOUND', status: 404 }
+    if (listing.provider.userId !== userId) return { error: 'FORBIDDEN', status: 403 }
+    return null
+  }
+
+  // GET /listings/:id/packages — public
+  app.get('/:id/packages', async (request, reply) => {
+    const { id } = request.params as { id: string }
+    const packages = await prisma.listingPackage.findMany({
+      where: { listingId: id },
+      orderBy: { price: 'asc' },
+    })
+    return reply.send({ packages })
+  })
+
+  // PUT /listings/:id/packages/:tier — create or replace one tier
+  app.put('/:id/packages/:tier', { preHandler: requireVerified }, async (request, reply) => {
+    const { id, tier } = request.params as { id: string; tier: string }
+    const body = packageSchema.safeParse({ ...(request.body as object), tier })
+    if (!body.success) {
+      return reply.status(400).send({ error: 'VALIDATION_ERROR', details: body.error.flatten() })
+    }
+
+    const denied = await checkOwnListing(id, request.userId)
+    if (denied) return reply.status(denied.status).send({ error: denied.error })
+
+    const data = body.data
+    const pkg = await prisma.listingPackage.upsert({
+      where: { listingId_tier: { listingId: id, tier: data.tier } },
+      create: { listingId: id, ...data },
+      update: {
+        title: data.title,
+        description: data.description,
+        price: data.price,
+        deliveryDays: data.deliveryDays,
+        features: data.features,
+      },
+    })
+    return reply.send({ package: pkg })
+  })
+
+  // DELETE /listings/:id/packages/:tier
+  app.delete('/:id/packages/:tier', { preHandler: requireAuth }, async (request, reply) => {
+    const { id, tier } = request.params as { id: string; tier: string }
+    const parsedTier = z.enum(['BASIC', 'STANDARD', 'PREMIUM']).safeParse(tier)
+    if (!parsedTier.success) return reply.status(400).send({ error: 'INVALID_TIER' })
+
+    const denied = await checkOwnListing(id, request.userId)
+    if (denied) return reply.status(denied.status).send({ error: denied.error })
+
+    await prisma.listingPackage.deleteMany({ where: { listingId: id, tier: parsedTier.data } })
+    return reply.send({ deleted: true })
   })
 }

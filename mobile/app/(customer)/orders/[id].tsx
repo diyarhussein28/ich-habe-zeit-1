@@ -24,6 +24,8 @@ import { Card } from '../../../src/components/ui/Card'
 import { Badge } from '../../../src/components/ui/Badge'
 import { Button } from '../../../src/components/ui/Button'
 import { StarRating } from '../../../src/components/ui/StarRating'
+import { OrderTimeframe } from '../../../src/components/orders/OrderTimeframe'
+import { OrderReviews } from '../../../src/components/orders/OrderReviews'
 import { getApiErrorMessage } from '../../../src/api/client'
 import { colors, spacing, fontSize, fontWeight, radius } from '../../../src/constants/theme'
 import { formatEur } from '../../../src/utils/currency'
@@ -181,6 +183,14 @@ export default function CustomerOrderDetailScreen() {
         <Text style={styles.date}>
           Erstellt am {formatDate(order.createdAt)}
         </Text>
+
+        <OrderTimeframe
+          scheduledStartAt={order.scheduledStartAt}
+          expectedCompletionAt={order.expectedCompletionAt}
+          completedAt={order.completedAt}
+        />
+
+        <OrderReviews ratings={order.ratings ?? []} viewerIsCustomer />
 
         {/* Provider card */}
         <Card style={styles.card}>
