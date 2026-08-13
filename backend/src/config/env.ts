@@ -24,6 +24,10 @@ const envSchema = z.object({
   STRIPE_SECRET_KEY: z.string().default(''),
   STRIPE_WEBHOOK_SECRET: z.string().default(''),
   PLATFORM_LEGAL_NAME: z.string().default('Ich habe Zeit GmbH'),
+  // Optional: the assistant endpoints report themselves unavailable rather
+  // than erroring when no key is configured, so the app still runs without it.
+  OPENAI_API_KEY: z.string().default(''),
+  OPENAI_MODEL: z.string().default('gpt-4.1-mini'),
 })
 
 function loadEnv() {
