@@ -24,6 +24,7 @@ import {
   countActiveFilters,
   type SearchFilters,
 } from '../../../src/components/search/FilterSheet'
+import { AnimatedEntrance, AnimatedFade } from '../../../src/components/ui/motion'
 import { useDebouncedValue } from '../../../src/hooks/useDebouncedValue'
 import { colors, spacing, fontSize, fontWeight, radius } from '../../../src/constants/theme'
 import { formatEur } from '../../../src/utils/currency'
@@ -198,8 +199,10 @@ export default function BrowseScreen() {
             <RefreshControl refreshing={listingsQuery.isFetching} onRefresh={listingsQuery.refetch} />
           }
           ListEmptyComponent={<EmptyState loading={listingsQuery.isLoading} kind="listings" />}
-          renderItem={({ item }) => (
-            <ListingCard listing={item} onPress={() => router.push(`/(customer)/listings/${item.id}`)} />
+          renderItem={({ item, index }) => (
+            <AnimatedEntrance index={index}>
+              <ListingCard listing={item} onPress={() => router.push(`/(customer)/listings/${item.id}`)} />
+            </AnimatedEntrance>
           )}
         />
       ) : (
@@ -212,8 +215,10 @@ export default function BrowseScreen() {
             <RefreshControl refreshing={providersQuery.isFetching} onRefresh={providersQuery.refetch} />
           }
           ListEmptyComponent={<EmptyState loading={providersQuery.isLoading} kind="providers" />}
-          renderItem={({ item }) => (
-            <ProviderCard provider={item} onPress={() => router.push(`/providers/${item.id}`)} />
+          renderItem={({ item, index }) => (
+            <AnimatedEntrance index={index}>
+              <ProviderCard provider={item} onPress={() => router.push(`/providers/${item.id}`)} />
+            </AnimatedEntrance>
           )}
         />
       )}
@@ -233,13 +238,13 @@ export default function BrowseScreen() {
 function EmptyState({ loading, kind }: { loading: boolean; kind: Tab }) {
   if (loading) return <ActivityIndicator style={{ marginTop: spacing.xxl }} color={colors.primary} />
   return (
-    <View style={styles.empty}>
+    <AnimatedFade style={styles.empty}>
       <Text style={styles.emptyEmoji}>{kind === 'listings' ? '🔍' : '🧑‍🔧'}</Text>
       <Text style={styles.emptyTitle}>Nichts gefunden</Text>
       <Text style={styles.emptyText}>
         Versuche es mit anderen Suchbegriffen oder setze die Filter zurück.
       </Text>
-    </View>
+    </AnimatedFade>
   )
 }
 

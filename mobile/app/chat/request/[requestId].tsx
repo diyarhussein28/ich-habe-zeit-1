@@ -24,6 +24,7 @@ import { getApiErrorMessage } from '../../../src/api/client'
 import { OfferCard } from '../../../src/components/chat/OfferCard'
 import { OfferComposer, type OfferDraft } from '../../../src/components/chat/OfferComposer'
 import { ConfirmModal } from '../../../src/components/ui/ConfirmModal'
+import { AnimatedEntrance } from '../../../src/components/ui/motion'
 import { useAuthStore } from '../../../src/store/auth.store'
 import { colors, spacing, fontSize, fontWeight, radius } from '../../../src/constants/theme'
 
@@ -188,7 +189,8 @@ export default function RequestChatScreen() {
                 </Text>
               </View>
             }
-            renderItem={({ item }) => (
+            renderItem={({ item, index }) => (
+              <AnimatedEntrance index={Math.min(index, 3)}>
               <ChatRow
                 message={item}
                 isOwn={item.senderId === user?.id}
@@ -204,6 +206,7 @@ export default function RequestChatScreen() {
                   setComposerOpen(true)
                 }}
               />
+              </AnimatedEntrance>
             )}
           />
         )}

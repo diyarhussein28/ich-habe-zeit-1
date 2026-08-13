@@ -14,6 +14,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { notificationsApi, type AppNotification } from '../../src/api/notifications.api'
 import { routeForNotification } from '../../src/hooks/usePushNotifications'
 import { useAuthStore } from '../../src/store/auth.store'
+import { AnimatedEntrance } from '../../src/components/ui/motion'
 import { colors, spacing, fontSize, fontWeight, radius } from '../../src/constants/theme'
 import { formatRelativeTime } from '../../src/utils/date'
 
@@ -100,8 +101,10 @@ export default function NotificationsScreen() {
             </View>
           )
         }
-        renderItem={({ item }) => (
-          <NotificationRow notification={item} onPress={() => handlePress(item)} />
+        renderItem={({ item, index }) => (
+          <AnimatedEntrance index={index}>
+            <NotificationRow notification={item} onPress={() => handlePress(item)} />
+          </AnimatedEntrance>
         )}
       />
     </SafeAreaView>

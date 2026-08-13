@@ -16,6 +16,8 @@ import { Input } from '../../src/components/ui/Input'
 import { categoriesApi } from '../../src/api/categories.api'
 import { requestsApi } from '../../src/api/requests.api'
 import { getApiErrorMessage } from '../../src/api/client'
+import { aiApi } from '../../src/api/ai.api'
+import { AiDraftSheet } from '../../src/components/ai/AiDraftSheet'
 import { usePlzLookup } from '../../src/hooks/usePlzLookup'
 import { formatPlzInput } from '../../src/utils/inputFormat'
 import { useAuthStore } from '../../src/store/auth.store'
@@ -36,6 +38,17 @@ export default function CreateRequestScreen() {
   const [errors, setErrors] = useState<Record<string, string>>({})
 
   const [apiError, setApiError] = useState<string | null>(null)
+  const [aiOpen, setAiOpen] = useState(false)
+
+  // Hide the AI entry point entirely when the assistant isn't configured or
+  // reachable, rather than offering something that will just fail.
+  const { data: aiStatus } = useQuery({
+    queryKey: ['ai-status'],
+    queryFn: () => aiApi.status().then((r) => r.data),
+    staleTime: 5 * 60 * 1000,
+    retry: false,
+  })
+  const aiAvailable = aiStatus?.available ?? false
 
   // Fill the city from the PLZ so the user doesn't have to type it. Tracked per
   // PLZ so a manual correction survives re-renders but a new PLZ refills.
@@ -111,6 +124,23 @@ export default function CreateRequestScreen() {
 
           <Text style={styles.title}>Neuen Auftrag erstellen</Text>
           <Text style={styles.subtitle}>Beschreibe was du benötigst.</Text>
+
+          {aiAvailable ? (
+            <TouchableOpacity
+              onPress={() => setAiOpen(true)}
+              style={styles.aiBanner}
+              activeOpacity={0.85}
+            >
+              <Text style={styles.aiBannerIcon}>✨</Text>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.aiBannerTitle}>Mit KI formulieren</Text>
+                <Text style={styles.aiBannerText}>
+                  Ein Satz genügt — der Assistent schreibt den Auftrag für dich.
+                </Text>
+              </View>
+              <Text style={styles.aiBannerArrow}>›</Text>
+            </TouchableOpacity>
+          ) : null}
 
           {/* Category selector */}
           <Text style={styles.label}>Kategorie *</Text>
@@ -206,6 +236,19 @@ export default function CreateRequestScreen() {
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
+
+      <AiDraftSheet
+        visible={aiOpen}
+        categoryName={categories?.find((c) => c.id === categoryId)?.name}
+        city={city || undefined}
+        onClose={() => setAiOpen(false)}
+        onApply={(draft) => {
+          setTitle(draft.title)
+          setDescription(draft.description)
+          if (draft.suggestedBudgetMax) setBudget(String(Math.round(draft.suggestedBudgetMax)))
+          setErrors({})
+        }}
+      />
     </SafeAreaView>
   )
 }
@@ -218,6 +261,21 @@ const styles = StyleSheet.create({
   backText: { fontSize: fontSize.md, color: colors.primary, fontWeight: fontWeight.medium },
   title: { fontSize: fontSize.xxl, fontWeight: fontWeight.bold, color: colors.text, marginBottom: spacing.sm },
   subtitle: { fontSize: fontSize.md, color: colors.textSecondary, marginBottom: spacing.lg },
+  aiBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    padding: spacing.md,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.primary,
+    backgroundColor: colors.primaryLight,
+    marginBottom: spacing.lg,
+  },
+  aiBannerIcon: { fontSize: 22 },
+  aiBannerTitle: { fontSize: fontSize.md, fontWeight: fontWeight.bold, color: colors.primary },
+  aiBannerText: { fontSize: fontSize.xs, color: colors.textSecondary, marginTop: 1 },
+  aiBannerArrow: { fontSize: 24, color: colors.primary },
   label: { fontSize: fontSize.sm, fontWeight: '500', color: colors.text, marginBottom: spacing.xs },
   errorText: { fontSize: fontSize.sm, color: colors.error, marginBottom: spacing.xs },
   catScroll: { marginBottom: spacing.md },
