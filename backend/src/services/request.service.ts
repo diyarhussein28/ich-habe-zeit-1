@@ -166,7 +166,7 @@ export async function listRequests(filter: ListRequestsFilter = {}) {
       where,
       include: {
         category: { select: { id: true, name: true, slug: true, icon: true } },
-        _count: { select: { offers: true } },
+        _count: { select: { offers: { where: { status: { in: ['PENDING', 'ACCEPTED'] } } } } },
       },
       orderBy,
       take: filter.limit ?? 20,
@@ -213,10 +213,11 @@ export async function listProviderFeed(providerUserId: string, limit = 20, offse
       include: {
         category: { select: { id: true, name: true, slug: true, icon: true } },
         customer: { include: { user: { select: { displayName: true, profilePhotoUrl: true } } } },
-        _count: { select: { offers: true } },
+        _count: { select: { offers: { where: { status: { in: ['PENDING', 'ACCEPTED'] } } } } },
         offers: {
           where: { providerId: provider.id },
           select: { id: true, status: true, proposedPrice: true },
+          orderBy: { createdAt: 'desc' },
           take: 1,
         },
       },

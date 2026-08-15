@@ -133,6 +133,26 @@ export async function listingRoutes(app: FastifyInstance) {
     })
   })
 
+  // GET /listings/mine — the calling provider's own listings, any status
+  // (the public GET / above is unauthenticated and ACTIVE-only, so it can't be
+  // reused for a provider's own listing-management screen)
+  app.get('/mine', { preHandler: requireAuth }, async (request, reply) => {
+    if (request.userRole !== 'PROVIDER') {
+      return reply.status(403).send({ error: 'PROVIDERS_ONLY' })
+    }
+
+    const provider = await prisma.providerProfile.findUnique({ where: { userId: request.userId } })
+    if (!provider) return reply.status(404).send({ error: 'PROVIDER_PROFILE_NOT_FOUND' })
+
+    const items = await prisma.serviceListing.findMany({
+      where: { providerId: provider.id },
+      include: { category: { select: { id: true, name: true, icon: true } } },
+      orderBy: { createdAt: 'desc' },
+    })
+
+    return reply.send({ items, total: items.length })
+  })
+
   // GET /listings/:id — listing detail (public, bumps view count)
   app.get('/:id', async (request, reply) => {
     const { id } = request.params as { id: string }

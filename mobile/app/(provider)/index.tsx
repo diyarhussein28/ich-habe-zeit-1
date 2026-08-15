@@ -251,7 +251,10 @@ function FeedCard({
   onChat: () => void
   onCustomerPress: () => void
 }) {
-  const alreadyOffered = !!request.myOffer
+  // A rejected/withdrawn/expired offer shouldn't block a fresh one — e.g. after
+  // the customer sends a counter-offer, the provider needs to be able to submit
+  // a new price rather than being stuck behind their old offer's static badge.
+  const alreadyOffered = request.myOffer?.status === 'PENDING' || request.myOffer?.status === 'ACCEPTED'
   const customerName = request.customer?.user?.displayName
   return (
     <Card style={styles.card}>

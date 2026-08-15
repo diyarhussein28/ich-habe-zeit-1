@@ -81,6 +81,10 @@ export const listingsApi = {
   browse: (params?: ListingsQuery) =>
     apiClient.get<{ items: ServiceListing[]; total: number }>('/api/listings', { params }),
 
+  /** The calling provider's own listings (any status), for their listing-management screen. */
+  mine: () =>
+    apiClient.get<{ items: ServiceListing[]; total: number }>('/api/listings/mine'),
+
   getById: (id: string) =>
     apiClient.get<{ listing: ServiceListing }>(`/api/listings/${id}`),
 

@@ -30,7 +30,11 @@ export function routeForNotification(data: NotificationData, role?: string) {
     case 'NEW_OFFER':
       return data.requestId ? `/(customer)/requests/${data.requestId}` : null
     case 'OFFER_ACCEPTED':
-      return data.orderId ? `/(provider)/orders/${data.orderId}` : null
+      // also reused for "counter-offer received" / "offer declined" pushes, which
+      // carry a requestId instead of an orderId (no order exists yet) — fall back
+      // to the provider home, where the actionable request card lives
+      if (data.orderId) return `/(provider)/orders/${data.orderId}`
+      return data.requestId ? '/(provider)' : null
     case 'ORDER_UPDATE':
     case 'PAYMENT_CAPTURED':
     case 'RELEASE_REMINDER':
@@ -63,7 +67,6 @@ async function setupAndroidChannel() {
     importance: Notifications.AndroidImportance.MAX,
     vibrationPattern: [0, 250, 250, 250],
     lightColor: '#1A56DB',
-    sound: 'default',
   })
 }
 

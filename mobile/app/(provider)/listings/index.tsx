@@ -4,7 +4,6 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useRouter } from 'expo-router'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { listingsApi, ServiceListing } from '../../../src/api/listings.api'
-import { useAuthStore } from '../../../src/store/auth.store'
 import { Card } from '../../../src/components/ui/Card'
 import { Badge } from '../../../src/components/ui/Badge'
 import { colors, spacing, fontSize, fontWeight, radius } from '../../../src/constants/theme'
@@ -22,12 +21,11 @@ const STATUS_COLOR: Record<string, 'primary' | 'success' | 'warning' | 'error' |
 
 export default function ProviderListingsScreen() {
   const router = useRouter()
-  const { user } = useAuthStore()
   const qc = useQueryClient()
 
   const { data, isLoading, refetch } = useQuery({
     queryKey: ['my-listings'],
-    queryFn: () => listingsApi.browse({ limit: 50 }).then((r) => r.data),
+    queryFn: () => listingsApi.mine().then((r) => r.data),
   })
 
   const toggleMutation = useMutation({

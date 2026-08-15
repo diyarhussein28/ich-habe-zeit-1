@@ -158,10 +158,11 @@ export async function requestRoutes(app: FastifyInstance) {
   })
 
   // POST /requests/offers/:offerId/reject — customer declines an offer
+  // Ownership is enforced by offerService (offer's request.customer.userId must
+  // match the caller), not by account role — dual-role accounts (role=PROVIDER
+  // with a secondary customer profile) must still be able to manage offers on
+  // requests they created as a customer.
   app.post('/offers/:offerId/reject', { preHandler: requireAuth }, async (request, reply) => {
-    if (request.userRole !== 'CUSTOMER') {
-      return reply.status(403).send({ error: 'CUSTOMERS_ONLY' })
-    }
     const { offerId } = request.params as { offerId: string }
     try {
       const { offer, providerUserId, requestTitle } = await offerService.rejectOffer(offerId, request.userId)
@@ -181,10 +182,8 @@ export async function requestRoutes(app: FastifyInstance) {
   })
 
   // POST /requests/offers/:offerId/counter — customer declines but suggests a different price
+  // Ownership is enforced by offerService, same reasoning as /reject above.
   app.post('/offers/:offerId/counter', { preHandler: requireAuth }, async (request, reply) => {
-    if (request.userRole !== 'CUSTOMER') {
-      return reply.status(403).send({ error: 'CUSTOMERS_ONLY' })
-    }
     const { offerId } = request.params as { offerId: string }
     const body = z.object({ counterPrice: z.number().positive(), message: z.string().max(500).optional() }).safeParse(request.body)
     if (!body.success) return reply.status(400).send({ error: 'VALIDATION_ERROR', details: body.error.flatten() })

@@ -9,7 +9,7 @@ import {
   KeyboardAvoidingView,
   Platform,
 } from 'react-native'
-import { useRouter } from 'expo-router'
+import { useRouter, useFocusEffect } from 'expo-router'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { Button } from '../../src/components/ui/Button'
 import { Input } from '../../src/components/ui/Input'
@@ -36,6 +36,16 @@ export default function LoginScreen() {
   const [showDiagnostic, setShowDiagnostic] = useState(false)
   const [diagnostic, setDiagnostic] = useState<ConnectionDiagnostic | null>(null)
   const [diagnosing, setDiagnosing] = useState(false)
+
+  // expo-router keeps this screen instance alive across a logout → login round
+  // trip (it's re-shown via redirect, not remounted), so without this the
+  // previous session's password stays sitting in the field, masked but intact.
+  useFocusEffect(
+    React.useCallback(() => {
+      setPassword('')
+      setShowPassword(false)
+    }, []),
+  )
 
   const validate = () => {
     const errs: typeof errors = {}
