@@ -116,6 +116,53 @@ export async function providerRoutes(app: FastifyInstance) {
     })
   })
 
+  // GET /providers/top — best-rated providers for the "Top Dienstleister"
+  // showcase. Public, like the directory search above. Requires at least a
+  // couple of reviews so a single 5-star rating can't outrank an established
+  // provider with a strong track record.
+  app.get('/top', async (request, reply) => {
+    const parsed = z
+      .object({
+        limit: z.coerce.number().int().min(1).max(20).default(10),
+        minReviews: z.coerce.number().int().min(0).max(50).default(2),
+      })
+      .safeParse(request.query)
+
+    if (!parsed.success) {
+      return reply.status(400).send({ error: 'VALIDATION_ERROR', details: parsed.error.flatten() })
+    }
+    const { limit, minReviews } = parsed.data
+
+    const rows = await prisma.providerProfile.findMany({
+      where: { totalReviews: { gte: minReviews } },
+      include: {
+        user: { select: { id: true, displayName: true, profilePhotoUrl: true, verificationStatus: true } },
+        providerCategories: { include: { category: { select: { id: true, name: true, icon: true } } } },
+        _count: { select: { offers: { where: { order: { status: 'RELEASED' } } } } },
+      },
+      orderBy: [{ averageRating: 'desc' }, { totalReviews: 'desc' }],
+      take: limit,
+    })
+
+    return reply.send({
+      items: rows.map((p) => ({
+        id: p.id,
+        displayName: p.user.displayName,
+        profilePhotoUrl: p.user.profilePhotoUrl,
+        isVerified: p.user.verificationStatus === 'KYC_VERIFIED',
+        bio: p.bio,
+        averageRating: p.averageRating,
+        totalReviews: p.totalReviews,
+        completedJobsCount: p._count.offers,
+        categories: p.providerCategories.map((pc) => ({
+          id: pc.category.id,
+          name: pc.category.name,
+          icon: pc.category.icon,
+        })),
+      })),
+    })
+  })
+
   // GET /providers/:id — public Dienstleister profile (bio, languages, expertise,
   // portfolio, listings, reviews). Public like listing detail — no auth required,
   // this is the browsable marketplace-facing view of a provider.

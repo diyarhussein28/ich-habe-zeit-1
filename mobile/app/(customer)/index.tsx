@@ -19,6 +19,7 @@ import { Card } from '../../src/components/ui/Card'
 import { Badge } from '../../src/components/ui/Badge'
 import { Button } from '../../src/components/ui/Button'
 import { NotificationBell } from '../../src/components/ui/NotificationBell'
+import { TopProvidersSection } from '../../src/components/ui/TopProvidersSection'
 import { useAuthStore } from '../../src/store/auth.store'
 import { colors, spacing, fontSize, fontWeight, radius } from '../../src/constants/theme'
 import type { ServiceCategory, ServiceRequest } from '../../src/api/types'
@@ -142,6 +143,8 @@ export default function CustomerHomeScreen() {
           </View>
           <Text style={styles.inserteBannerArrow}>→</Text>
         </TouchableOpacity>
+
+        <TopProvidersSection />
 
         {/* Categories */}
         <Text style={styles.sectionTitle}>Kategorien</Text>
