@@ -2,13 +2,25 @@ import { prisma } from '../config/prisma.js'
 
 // ─── Submit rating ────────────────────────────────────────────────────────────
 
+function validateSubScore(value: number | undefined, label: string) {
+  if (value === undefined) return
+  if (!Number.isInteger(value) || value < 1 || value > 5) throw new Error(`INVALID_SCORE:${label}`)
+}
+
 export async function submitRating(data: {
   orderId: string
   raterUserId: string
   score: number
   comment?: string
+  qualityScore?: number
+  punctualityScore?: number
+  communicationScore?: number
+  photoUrls?: string[]
 }) {
   if (data.score < 1 || data.score > 5) throw new Error('INVALID_SCORE')
+  validateSubScore(data.qualityScore, 'quality')
+  validateSubScore(data.punctualityScore, 'punctuality')
+  validateSubScore(data.communicationScore, 'communication')
 
   const order = await prisma.order.findUnique({
     where: { id: data.orderId },
@@ -52,10 +64,16 @@ export async function submitRating(data: {
         orderId: data.orderId,
         score: data.score,
         comment: data.comment,
+        // Sub-scores and photos are only meaningful for a customer rating a
+        // provider — there's no mobile UI to collect them the other way.
         ...(isCustomer
           ? {
               customerRaterId: customerProfile.id,
               providerReceiverId: providerProfile.id,
+              qualityScore: data.qualityScore,
+              punctualityScore: data.punctualityScore,
+              communicationScore: data.communicationScore,
+              photoUrls: data.photoUrls ?? [],
             }
           : {
               providerRaterId: providerProfile.id,
@@ -68,9 +86,15 @@ export async function submitRating(data: {
     if (isCustomer) {
       const allRatings = await tx.rating.findMany({
         where: { providerReceiverId: providerProfile.id },
-        select: { score: true },
+        select: { score: true, qualityScore: true, punctualityScore: true, communicationScore: true },
       })
       const totalReviews = allRatings.length
+      const avgOf = (values: (number | null)[]) => {
+        const present = values.filter((v): v is number => v !== null)
+        return present.length > 0
+          ? Math.round((present.reduce((sum, v) => sum + v, 0) / present.length) * 100) / 100
+          : null
+      }
       const averageRating =
         totalReviews > 0
           ? allRatings.reduce((sum, r) => sum + r.score, 0) / totalReviews
@@ -81,6 +105,9 @@ export async function submitRating(data: {
         data: {
           totalReviews,
           averageRating: Math.round(averageRating * 100) / 100,
+          avgQualityScore: avgOf(allRatings.map((r) => r.qualityScore)),
+          avgPunctualityScore: avgOf(allRatings.map((r) => r.punctualityScore)),
+          avgCommunicationScore: avgOf(allRatings.map((r) => r.communicationScore)),
         },
       })
     } else {

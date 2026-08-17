@@ -9,6 +9,7 @@ const VALID_CONTEXTS = new Set<ModerationContentType>([
   'REQUEST_PHOTO',
   'COMPLETION_PHOTO',
   'DISPUTE_EVIDENCE',
+  'REVIEW_PHOTO',
 ])
 
 export async function mediaRoutes(app: FastifyInstance) {

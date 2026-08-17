@@ -8,6 +8,7 @@ export interface RegisterPayload {
   password: string
   displayName: string
   role: Extract<UserRole, 'CUSTOMER' | 'PROVIDER'>
+  referralCode?: string
 }
 
 export interface LoginPayload {

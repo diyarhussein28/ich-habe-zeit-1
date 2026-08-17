@@ -15,6 +15,7 @@ import { notificationsApi, type AppNotification } from '../../src/api/notificati
 import { routeForNotification } from '../../src/hooks/usePushNotifications'
 import { useAuthStore } from '../../src/store/auth.store'
 import { AnimatedEntrance } from '../../src/components/ui/motion'
+import { ErrorState } from '../../src/components/ui/ErrorState'
 import { colors, spacing, fontSize, fontWeight, radius } from '../../src/constants/theme'
 import { formatRelativeTime } from '../../src/utils/date'
 
@@ -41,7 +42,7 @@ export default function NotificationsScreen() {
   const qc = useQueryClient()
   const role = useAuthStore((s) => s.user?.role)
 
-  const { data, isLoading, refetch } = useQuery({
+  const { data, isLoading, isError, error, refetch, isRefetching } = useQuery({
     queryKey: ['notifications'],
     queryFn: () => notificationsApi.list({ limit: 50 }).then((r) => r.data),
   })
@@ -93,6 +94,8 @@ export default function NotificationsScreen() {
         ListEmptyComponent={
           isLoading ? (
             <ActivityIndicator style={{ marginTop: spacing.xl }} color={colors.primary} />
+          ) : isError ? (
+            <ErrorState error={error} onRetry={() => refetch()} retrying={isRefetching} style={{ marginTop: spacing.xl }} />
           ) : (
             <View style={styles.empty}>
               <Text style={styles.emptyEmoji}>🔔</Text>

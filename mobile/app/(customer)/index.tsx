@@ -20,6 +20,7 @@ import { Badge } from '../../src/components/ui/Badge'
 import { Button } from '../../src/components/ui/Button'
 import { NotificationBell } from '../../src/components/ui/NotificationBell'
 import { TopProvidersSection } from '../../src/components/ui/TopProvidersSection'
+import { ErrorState } from '../../src/components/ui/ErrorState'
 import { useAuthStore } from '../../src/store/auth.store'
 import { colors, spacing, fontSize, fontWeight, radius } from '../../src/constants/theme'
 import type { ServiceCategory, ServiceRequest } from '../../src/api/types'
@@ -53,12 +54,12 @@ export default function CustomerHomeScreen() {
   const [search, setSearch] = useState('')
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null)
 
-  const { data: categories, isLoading: catsLoading } = useQuery({
+  const { data: categories, isLoading: catsLoading, isError: catsError, refetch: refetchCats, isRefetching: catsRefetching } = useQuery({
     queryKey: ['categories'],
     queryFn: () => categoriesApi.list().then((r) => r.data.categories),
   })
 
-  const { data: myRequests, isLoading: activeOrdersLoading } = useQuery({
+  const { data: myRequests, isLoading: activeOrdersLoading, isError: requestsError, error: requestsErrorObj, refetch: refetchRequests, isRefetching: requestsRefetching } = useQuery({
     queryKey: ['my-requests'],
     queryFn: () => requestsApi.list({ limit: 20 }).then((r) => r.data.items),
     enabled: !!user,
@@ -112,6 +113,8 @@ export default function CustomerHomeScreen() {
           </View>
           {activeOrdersLoading ? (
             <ActivityIndicator color={colors.primary} style={{ marginVertical: spacing.lg }} />
+          ) : requestsError ? (
+            <ErrorState error={requestsErrorObj} onRetry={() => refetchRequests()} retrying={requestsRefetching} />
           ) : activeOrders.length === 0 ? (
             <View style={styles.activeEmpty}>
               <Text style={styles.activeEmptyEmoji}>✅</Text>
@@ -150,6 +153,8 @@ export default function CustomerHomeScreen() {
         <Text style={styles.sectionTitle}>Kategorien</Text>
         {catsLoading ? (
           <ActivityIndicator color={colors.primary} style={{ marginTop: spacing.xl }} />
+        ) : catsError ? (
+          <ErrorState onRetry={() => refetchCats()} retrying={catsRefetching} />
         ) : (filtered?.length === 0) ? (
           <View style={styles.empty}>
             <Text style={styles.emptyText}>Keine Kategorien gefunden</Text>

@@ -30,6 +30,11 @@ export default function ProviderDashboardScreen() {
     queryFn: () => profileApi.getProviderProfile().then((r) => r.data.profile),
   })
 
+  const { data: earnings } = useQuery({
+    queryKey: ['provider-earnings'],
+    queryFn: () => profileApi.getProviderEarnings().then((r) => r.data.months),
+  })
+
   const list = orders ?? []
   const paidOut = list.filter((o: Order) => PAYOUT_STATUSES.includes(o.status))
   const active = list.filter((o: Order) => ACTIVE_STATUSES.includes(o.status))
@@ -68,6 +73,13 @@ export default function ProviderDashboardScreen() {
             <StatTile label="Rezensionen" value={profile ? String(profile.totalReviews) : '—'} emoji="💬" />
           </View>
 
+          {earnings && earnings.some((m) => m.netAmount > 0) ? (
+            <View style={styles.chartCard}>
+              <Text style={styles.chartTitle}>Einnahmen der letzten 6 Monate</Text>
+              <EarningsChart months={earnings} />
+            </View>
+          ) : null}
+
           <TouchableOpacity style={styles.linkCard} onPress={() => router.push('/(provider)/profile/payout-history')}>
             <Text style={styles.linkCardText}>Alle Auszahlungen ansehen</Text>
             <Text style={styles.linkCardArrow}>›</Text>
@@ -75,6 +87,23 @@ export default function ProviderDashboardScreen() {
         </ScrollView>
       )}
     </SafeAreaView>
+  )
+}
+
+function EarningsChart({ months }: { months: { key: string; label: string; netAmount: number; orderCount: number }[] }) {
+  const max = Math.max(1, ...months.map((m) => m.netAmount))
+  return (
+    <View style={styles.chartRow}>
+      {months.map((m) => (
+        <View key={m.key} style={styles.chartBarWrap}>
+          <Text style={styles.chartBarValue}>{m.netAmount > 0 ? formatEur(m.netAmount) : ''}</Text>
+          <View style={styles.chartBarTrack}>
+            <View style={[styles.chartBar, { height: `${Math.max(4, (m.netAmount / max) * 100)}%` }]} />
+          </View>
+          <Text style={styles.chartBarLabel}>{m.label}</Text>
+        </View>
+      ))}
+    </View>
   )
 }
 
@@ -103,6 +132,14 @@ const styles = StyleSheet.create({
   statEmoji: { fontSize: 22, marginBottom: spacing.xs },
   statValue: { fontSize: fontSize.lg, fontWeight: fontWeight.bold, color: colors.text },
   statLabel: { fontSize: fontSize.xs, color: colors.textSecondary, marginTop: 2 },
+  chartCard: { backgroundColor: colors.surface, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, padding: spacing.md, marginBottom: spacing.sm },
+  chartTitle: { fontSize: fontSize.sm, fontWeight: fontWeight.semibold, color: colors.text, marginBottom: spacing.md },
+  chartRow: { flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between', height: 140 },
+  chartBarWrap: { flex: 1, alignItems: 'center', justifyContent: 'flex-end', height: '100%' },
+  chartBarValue: { fontSize: 9, color: colors.textSecondary, marginBottom: 2 },
+  chartBarTrack: { width: 18, flex: 1, justifyContent: 'flex-end' },
+  chartBar: { width: '100%', backgroundColor: colors.primary, borderRadius: radius.sm, minHeight: 4 },
+  chartBarLabel: { fontSize: 9, color: colors.textDisabled, marginTop: spacing.xs },
   linkCard: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: colors.surface, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, padding: spacing.md, marginTop: spacing.sm },
   linkCardText: { fontSize: fontSize.sm, fontWeight: fontWeight.medium, color: colors.text },
   linkCardArrow: { fontSize: fontSize.lg, color: colors.textSecondary },

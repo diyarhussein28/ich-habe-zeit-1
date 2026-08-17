@@ -3,6 +3,7 @@ import { z } from 'zod'
 import * as orderService from '../services/order.service.js'
 import * as chatService from '../services/chat.service.js'
 import * as disputeService from '../services/dispute.service.js'
+import * as ratingService from '../services/rating.service.js'
 import { requireAuth, requireVerified, requireRole } from '../middleware/auth.middleware.js'
 import { notifyEvent } from '../services/notification.service.js'
 import { flagUnusualRatingPattern } from '../services/moderation.service.js'
@@ -48,6 +49,12 @@ const resolveDisputeSchema = z.object({
 const submitRatingSchema = z.object({
   rating: z.number().int().min(1).max(5),
   comment: z.string().max(1000).optional(),
+  // Only meaningful when the rater is the customer — the mobile UI only
+  // collects these for the customer→provider direction.
+  qualityScore: z.number().int().min(1).max(5).optional(),
+  punctualityScore: z.number().int().min(1).max(5).optional(),
+  communicationScore: z.number().int().min(1).max(5).optional(),
+  photoUrls: z.array(z.string().url()).max(6).optional(),
 })
 
 export async function orderRoutes(app: FastifyInstance) {
@@ -452,63 +459,37 @@ export async function orderRoutes(app: FastifyInstance) {
     if (!isCustomer && !isProvider) return reply.status(403).send({ error: 'FORBIDDEN' })
 
     try {
-      let rating
+      const rating = await ratingService.submitRating({
+        orderId: id,
+        raterUserId: request.userId,
+        score: body.data.rating,
+        comment: body.data.comment,
+        qualityScore: body.data.qualityScore,
+        punctualityScore: body.data.punctualityScore,
+        communicationScore: body.data.communicationScore,
+        photoUrls: body.data.photoUrls,
+      })
+
       if (isCustomer) {
-        const customerProfile = await prisma.customerProfile.findUnique({ where: { userId: request.userId } })
-        if (!customerProfile) return reply.status(400).send({ error: 'NO_CUSTOMER_PROFILE' })
-
-        const existing = await prisma.rating.findFirst({
-          where: { orderId: id, customerRaterId: customerProfile.id },
-        })
-        if (existing) return reply.status(409).send({ error: 'ALREADY_RATED' })
-
-        rating = await prisma.rating.create({
-          data: {
-            orderId: id,
-            customerRaterId: customerProfile.id,
-            providerReceiverId: order.offer.providerId,
-            score: body.data.rating,
-            comment: body.data.comment,
-          },
-        })
         flagUnusualRatingPattern({
           raterUserId: request.userId,
           side: 'customer',
-          raterProfileId: customerProfile.id,
-          receiverProfileId: order.offer.providerId,
+          raterProfileId: rating.customerRaterId!,
+          receiverProfileId: rating.providerReceiverId!,
         }).catch(() => {})
       } else {
-        const providerProfile = await prisma.providerProfile.findUnique({ where: { userId: request.userId } })
-        if (!providerProfile) return reply.status(400).send({ error: 'NO_PROVIDER_PROFILE' })
-
-        const customerProfile = await prisma.customerProfile.findUnique({ where: { userId: order.customerId } })
-        if (!customerProfile) return reply.status(400).send({ error: 'CUSTOMER_HAS_NO_PROFILE' })
-
-        const existing = await prisma.rating.findFirst({
-          where: { orderId: id, providerRaterId: providerProfile.id },
-        })
-        if (existing) return reply.status(409).send({ error: 'ALREADY_RATED' })
-
-        rating = await prisma.rating.create({
-          data: {
-            orderId: id,
-            providerRaterId: providerProfile.id,
-            customerReceiverId: customerProfile.id,
-            score: body.data.rating,
-            comment: body.data.comment,
-          },
-        })
         flagUnusualRatingPattern({
           raterUserId: request.userId,
           side: 'provider',
-          raterProfileId: providerProfile.id,
-          receiverProfileId: customerProfile.id,
+          raterProfileId: rating.providerRaterId!,
+          receiverProfileId: rating.customerReceiverId!,
         }).catch(() => {})
       }
+
       return reply.send({ rating })
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'ERROR'
-      return reply.status(400).send({ error: msg })
+      return reply.status(msg === 'ALREADY_RATED' ? 409 : 400).send({ error: msg })
     }
   })
 

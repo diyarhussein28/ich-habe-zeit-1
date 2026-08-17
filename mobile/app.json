@@ -17,7 +17,10 @@
       "bundleIdentifier": "de.ichhabezeit.app",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false
-      }
+      },
+      "associatedDomains": [
+        "applinks:ich-habe-zeit-1-production.up.railway.app"
+      ]
     },
     "android": {
       "adaptiveIcon": {
@@ -27,7 +30,26 @@
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
       "package": "de.ichhabezeit.app",
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "intentFilters": [
+        {
+          "action": "VIEW",
+          "autoVerify": true,
+          "data": [
+            {
+              "scheme": "https",
+              "host": "ich-habe-zeit-1-production.up.railway.app",
+              "pathPrefix": "/providers"
+            },
+            {
+              "scheme": "https",
+              "host": "ich-habe-zeit-1-production.up.railway.app",
+              "pathPrefix": "/listings"
+            }
+          ],
+          "category": ["BROWSABLE", "DEFAULT"]
+        }
+      ]
     },
     "web": {
       "favicon": "./assets/favicon.png",
@@ -42,7 +64,8 @@
           "enableGooglePay": false
         }
       ],
-      "expo-sharing"
+      "expo-sharing",
+      "@sentry/react-native"
     ],
     "experiments": {
       "typedRoutes": true
@@ -58,7 +81,10 @@
       "policy": "appVersion"
     },
     "updates": {
-      "url": "https://u.expo.dev/32bf1253-53f6-48b0-93ea-eb28ebe6cb8b"
+      "url": "https://u.expo.dev/32bf1253-53f6-48b0-93ea-eb28ebe6cb8b",
+      "requestHeaders": {
+        "expo-channel-name": "preview"
+      }
     }
   }
 }

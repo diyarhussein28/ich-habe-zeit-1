@@ -278,6 +278,54 @@ export async function profileRoutes(app: FastifyInstance) {
     }
   })
 
+  // GET /profile/provider/earnings — monthly net-earnings breakdown for the
+  // last 6 months, for the provider's own dashboard. Grouped in JS rather
+  // than SQL since the order volumes here are small and this keeps the
+  // query portable (no raw SQL date-truncation needed).
+  app.get('/provider/earnings', { preHandler: requireRole('PROVIDER') }, async (request, reply) => {
+    const provider = await prisma.providerProfile.findUnique({ where: { userId: request.userId } })
+    if (!provider) return reply.status(404).send({ error: 'PROVIDER_NOT_FOUND' })
+
+    const sixMonthsAgo = new Date()
+    sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 5)
+    sixMonthsAgo.setDate(1)
+    sixMonthsAgo.setHours(0, 0, 0, 0)
+
+    const orders = await prisma.order.findMany({
+      where: {
+        offer: { providerId: provider.id },
+        status: { in: ['RELEASED', 'PARTIALLY_RELEASED'] },
+        releasedAt: { gte: sixMonthsAgo },
+      },
+      select: { releasedAt: true, netProviderAmount: true, releasedAmount: true },
+    })
+
+    const months: { key: string; label: string; netAmount: number; orderCount: number }[] = []
+    const cursor = new Date(sixMonthsAgo)
+    for (let i = 0; i < 6; i++) {
+      const key = `${cursor.getFullYear()}-${String(cursor.getMonth() + 1).padStart(2, '0')}`
+      months.push({
+        key,
+        label: cursor.toLocaleDateString('de-DE', { month: 'short', year: '2-digit' }),
+        netAmount: 0,
+        orderCount: 0,
+      })
+      cursor.setMonth(cursor.getMonth() + 1)
+    }
+
+    for (const order of orders) {
+      if (!order.releasedAt) continue
+      const key = `${order.releasedAt.getFullYear()}-${String(order.releasedAt.getMonth() + 1).padStart(2, '0')}`
+      const bucket = months.find((m) => m.key === key)
+      if (bucket) {
+        bucket.netAmount += order.releasedAmount ?? order.netProviderAmount
+        bucket.orderCount += 1
+      }
+    }
+
+    return reply.send({ months })
+  })
+
   // PUT /profile/provider/service-areas
   app.put(
     '/provider/service-areas',

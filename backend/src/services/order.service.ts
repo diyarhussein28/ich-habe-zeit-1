@@ -82,6 +82,31 @@ export async function acceptOffer(offerId: string, customerUserId: string) {
       },
     })
 
+    // Apply any available referral credit as a discount on what the customer
+    // is actually charged. The provider's netProviderAmount above is already
+    // computed from the full agreed price and is untouched — the platform
+    // absorbs the discount, not the provider. Capped at the order's own
+    // gross amount so credit can never make a payment negative.
+    const customerProfile = offer.request.customer
+    // Stripe rejects a €0 PaymentIntent, so credit can discount the order
+    // down to its minimum chargeable amount but never fully comp it.
+    const maxRedeemable = Math.max(0, grossAmount - 0.5)
+    const creditToApply = Math.min(customerProfile.creditBalance, maxRedeemable)
+    if (creditToApply > 0) {
+      await tx.creditTransaction.create({
+        data: {
+          customerProfileId: customerProfile.id,
+          amount: -creditToApply,
+          reason: 'ORDER_REDEMPTION',
+          orderId: newOrder.id,
+        },
+      })
+      await tx.customerProfile.update({
+        where: { id: customerProfile.id },
+        data: { creditBalance: { decrement: creditToApply } },
+      })
+    }
+
     // Create order chat
     await tx.chat.create({ data: { orderId: newOrder.id } })
 
@@ -209,7 +234,64 @@ export async function releasePayment(orderId: string, customerUserId: string, tr
     console.error(`Invoice generation failed for order ${orderId}:`, err)
   })
 
+  await awardReferralBonusForFirstOrder(orderId, customerUserId).catch((err) => {
+    console.error(`Referral bonus check failed for order ${orderId}:`, err)
+  })
+
   return updated
+}
+
+const REFERRAL_REFERRER_BONUS_EUR = 15
+
+// Called every time an order reaches RELEASED (manual or auto). A no-op
+// unless this is the customer's *first ever* released order and they were
+// themselves referred by someone — in which case the referrer is credited.
+// Idempotent via the unique orderId on the resulting CreditTransaction, so
+// it's safe to call even if invoked more than once for the same order.
+async function awardReferralBonusForFirstOrder(orderId: string, customerUserId: string) {
+  const user = await prisma.user.findUnique({
+    where: { id: customerUserId },
+    select: { referredByUserId: true },
+  })
+  if (!user?.referredByUserId) return
+
+  const releasedOrderCount = await prisma.order.count({
+    where: { customerId: customerUserId, status: 'RELEASED' },
+  })
+  if (releasedOrderCount !== 1) return // not their first
+
+  const alreadyAwarded = await prisma.creditTransaction.findFirst({
+    where: { orderId, reason: 'REFERRAL_REFERRER_BONUS' },
+  })
+  if (alreadyAwarded) return
+
+  const referrerProfile = await prisma.customerProfile.upsert({
+    where: { userId: user.referredByUserId },
+    create: { userId: user.referredByUserId },
+    update: {},
+  })
+
+  await prisma.$transaction([
+    prisma.creditTransaction.create({
+      data: {
+        customerProfileId: referrerProfile.id,
+        amount: REFERRAL_REFERRER_BONUS_EUR,
+        reason: 'REFERRAL_REFERRER_BONUS',
+        orderId,
+      },
+    }),
+    prisma.customerProfile.update({
+      where: { id: referrerProfile.id },
+      data: { creditBalance: { increment: REFERRAL_REFERRER_BONUS_EUR } },
+    }),
+  ])
+
+  await notifyEvent({
+    userId: user.referredByUserId,
+    pushType: 'ACCOUNT_STATUS',
+    title: 'Empfehlungsbonus erhalten! 🎉',
+    body: `Deine Empfehlung hat ihren ersten Auftrag abgeschlossen — du hast ${REFERRAL_REFERRER_BONUS_EUR.toFixed(2)} € Guthaben erhalten.`,
+  }).catch(() => {})
 }
 
 // ─── Auto-release (run by scheduled job) ─────────────────────────────────────
@@ -254,6 +336,10 @@ export async function processAutoReleases() {
 
       await generateInvoicesForOrder(order.id).catch((err) => {
         console.error(`Invoice generation failed for auto-released order ${order.id}:`, err)
+      })
+
+      await awardReferralBonusForFirstOrder(order.id, order.customerId).catch((err) => {
+        console.error(`Referral bonus check failed for auto-released order ${order.id}:`, err)
       })
     })
   )

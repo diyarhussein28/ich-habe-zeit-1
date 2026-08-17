@@ -6,6 +6,7 @@ import { useQuery } from '@tanstack/react-query'
 import { customersApi, type CustomerReview } from '../../src/api/customers.api'
 import { Card } from '../../src/components/ui/Card'
 import { StarRating } from '../../src/components/ui/StarRating'
+import { ErrorState } from '../../src/components/ui/ErrorState'
 import { colors, spacing, fontSize, fontWeight, radius } from '../../src/constants/theme'
 import { formatDate } from '../../src/utils/date'
 
@@ -13,7 +14,7 @@ export default function PublicCustomerProfileScreen() {
   const { id } = useLocalSearchParams<{ id: string }>()
   const router = useRouter()
 
-  const { data: customer, isLoading } = useQuery({
+  const { data: customer, isLoading, isError, error, refetch, isRefetching } = useQuery({
     queryKey: ['public-customer', id],
     queryFn: () => customersApi.get(id).then((r) => r.data.customer),
     enabled: !!id,
@@ -25,6 +26,14 @@ export default function PublicCustomerProfileScreen() {
         <View style={styles.center}>
           <ActivityIndicator size="large" color={colors.primary} />
         </View>
+      </SafeAreaView>
+    )
+  }
+
+  if (isError) {
+    return (
+      <SafeAreaView style={styles.safe} edges={['top']}>
+        <ErrorState error={error} onRetry={() => refetch()} retrying={isRefetching} fullScreen />
       </SafeAreaView>
     )
   }

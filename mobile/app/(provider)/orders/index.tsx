@@ -6,6 +6,7 @@ import {
   TouchableOpacity,
   StyleSheet,
   RefreshControl,
+  ActivityIndicator,
 } from 'react-native'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useRouter } from 'expo-router'
@@ -14,6 +15,7 @@ import { ordersApi } from '../../../src/api/orders.api'
 import { Card } from '../../../src/components/ui/Card'
 import { Badge } from '../../../src/components/ui/Badge'
 import { Button } from '../../../src/components/ui/Button'
+import { ErrorState } from '../../../src/components/ui/ErrorState'
 import { getApiErrorMessage } from '../../../src/api/client'
 import { colors, spacing, fontSize, fontWeight } from '../../../src/constants/theme'
 import { formatEur } from '../../../src/utils/currency'
@@ -55,7 +57,7 @@ export default function ProviderOrdersScreen() {
   const [confirmId, setConfirmId] = useState<string | null>(null)
   const [completeError, setCompleteError] = useState<string | null>(null)
 
-  const { data, isLoading, refetch } = useQuery({
+  const { data, isLoading, isError, error, refetch, isRefetching } = useQuery({
     queryKey: ['provider-orders'],
     queryFn: () => ordersApi.list({ limit: 50, perspective: 'provider' }).then((r) => r.data),
   })
@@ -125,7 +127,11 @@ export default function ProviderOrdersScreen() {
         showsVerticalScrollIndicator={false}
         refreshControl={<RefreshControl refreshing={isLoading} onRefresh={refetch} />}
         ListEmptyComponent={
-          isLoading ? null : (
+          isLoading ? (
+            <ActivityIndicator color={colors.primary} style={{ marginTop: spacing.xxl }} />
+          ) : isError ? (
+            <ErrorState error={error} onRetry={() => refetch()} retrying={isRefetching} style={{ marginTop: spacing.xxl }} />
+          ) : (
             <View style={styles.empty}>
               <Text style={styles.emptyEmoji}>{tab === 'ACTIVE' ? '🔧' : '📦'}</Text>
               <Text style={styles.emptyTitle}>

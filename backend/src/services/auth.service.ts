@@ -13,6 +13,28 @@ import {
 } from '../lib/totp.js'
 import type { UserRole } from '@prisma/client'
 
+// Short, shareable, human-typeable referral code — not cryptographically
+// sensitive (it's meant to be given out), just needs to be unique and
+// unambiguous (no 0/O/1/I confusion).
+const REFERRAL_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
+function generateReferralCode(): string {
+  let code = ''
+  const bytes = randomBytes(6)
+  for (let i = 0; i < 6; i++) code += REFERRAL_ALPHABET[bytes[i] % REFERRAL_ALPHABET.length]
+  return code
+}
+
+async function uniqueReferralCode(): Promise<string> {
+  for (let attempt = 0; attempt < 5; attempt++) {
+    const code = generateReferralCode()
+    const existing = await prisma.user.findUnique({ where: { referralCode: code } })
+    if (!existing) return code
+  }
+  // Astronomically unlikely with a 32^6 keyspace, but fall back to something
+  // still unique rather than looping forever.
+  return `${generateReferralCode()}${Date.now().toString(36).toUpperCase().slice(-3)}`
+}
+
 export async function registerUser(data: {
   email: string
   phone: string
@@ -22,6 +44,7 @@ export async function registerUser(data: {
   registrationIp?: string
   registrationDeviceId?: string
   consentVersion?: string
+  referralCode?: string
 }) {
   const existingEmail = await prisma.user.findUnique({ where: { email: data.email } })
   if (existingEmail) throw new Error('EMAIL_TAKEN')
@@ -36,7 +59,16 @@ export async function registerUser(data: {
     ip: data.registrationIp,
   })
 
+  let referredByUserId: string | undefined
+  if (data.referralCode) {
+    const referrer = await prisma.user.findUnique({ where: { referralCode: data.referralCode.toUpperCase() } })
+    // An unknown/mistyped code is silently ignored rather than blocking
+    // registration — referral attribution is a bonus, not a gate.
+    if (referrer) referredByUserId = referrer.id
+  }
+
   const passwordHash = await bcrypt.hash(data.password, 12)
+  const referralCode = await uniqueReferralCode()
 
   const user = await prisma.user.create({
     data: {
@@ -47,6 +79,8 @@ export async function registerUser(data: {
       displayName: data.displayName,
       registrationIp: data.registrationIp,
       registrationDeviceId: data.registrationDeviceId,
+      referralCode,
+      referredByUserId,
       notificationSettings: { create: {} },
     },
   })

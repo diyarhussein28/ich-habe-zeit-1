@@ -91,6 +91,29 @@ export async function createOffer(input: CreateOfferInput) {
     })
   }
 
+  // Recompute the provider's average response time — minutes between a
+  // request going live and this provider's offer on it, averaged over their
+  // last 20 offers. Requests don't carry a separate "published" timestamp;
+  // createdAt is a close enough proxy since publishing normally follows
+  // creation immediately.
+  const recentOffers = await prisma.offer.findMany({
+    where: { providerId: provider.id },
+    orderBy: { createdAt: 'desc' },
+    take: 20,
+    select: { createdAt: true, request: { select: { createdAt: true } } },
+  })
+  if (recentOffers.length > 0) {
+    const avgMinutes =
+      recentOffers.reduce(
+        (sum, o) => sum + (o.createdAt.getTime() - o.request.createdAt.getTime()) / 60000,
+        0
+      ) / recentOffers.length
+    await prisma.providerProfile.update({
+      where: { id: provider.id },
+      data: { avgResponseMinutes: Math.max(0, Math.round(avgMinutes)) },
+    })
+  }
+
   return offer
 }
 

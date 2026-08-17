@@ -15,13 +15,14 @@ import { Card } from '../../../src/components/ui/Card'
 import { Badge } from '../../../src/components/ui/Badge'
 import { Button } from '../../../src/components/ui/Button'
 import { StarRating } from '../../../src/components/ui/StarRating'
+import { ErrorState } from '../../../src/components/ui/ErrorState'
 import { colors, spacing, fontSize, fontWeight, radius } from '../../../src/constants/theme'
 
 export default function BrowseCategoryScreen() {
   const { categoryId, categoryName } = useLocalSearchParams<{ categoryId: string; categoryName: string }>()
   const router = useRouter()
 
-  const { data: providers, isLoading } = useQuery({
+  const { data: providers, isLoading, isError, error, refetch, isRefetching } = useQuery({
     queryKey: ['category-providers', categoryId],
     queryFn: () => categoriesApi.listProviders(categoryId).then((r) => r.data.providers),
     enabled: !!categoryId,
@@ -60,7 +61,11 @@ export default function BrowseCategoryScreen() {
               <ActivityIndicator color={colors.primary} style={{ marginTop: spacing.xl }} />
             )}
 
-            {!isLoading && providers?.length === 0 && (
+            {isError && (
+              <ErrorState error={error} onRetry={() => refetch()} retrying={isRefetching} style={{ marginTop: spacing.xl }} />
+            )}
+
+            {!isLoading && !isError && providers?.length === 0 && (
               <Card style={styles.emptyCard}>
                 <Text style={styles.emptyTitle}>Noch keine Dienstleister verfügbar</Text>
                 <Text style={styles.emptyText}>

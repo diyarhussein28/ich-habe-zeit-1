@@ -15,6 +15,7 @@ const registerSchema = z.object({
   role: z.enum(['CUSTOMER', 'PROVIDER']),
   deviceId: z.string().optional(),
   consentVersion: z.string().optional(),
+  referralCode: z.string().min(4).max(20).optional(),
 })
 
 const loginSchema = z.object({

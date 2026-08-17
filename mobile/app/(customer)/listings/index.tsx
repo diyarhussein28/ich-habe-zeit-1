@@ -25,6 +25,7 @@ import {
   type SearchFilters,
 } from '../../../src/components/search/FilterSheet'
 import { AnimatedEntrance, AnimatedFade } from '../../../src/components/ui/motion'
+import { ErrorState } from '../../../src/components/ui/ErrorState'
 import { useDebouncedValue } from '../../../src/hooks/useDebouncedValue'
 import { colors, spacing, fontSize, fontWeight, radius } from '../../../src/constants/theme'
 import { formatEur } from '../../../src/utils/currency'
@@ -198,7 +199,16 @@ export default function BrowseScreen() {
           refreshControl={
             <RefreshControl refreshing={listingsQuery.isFetching} onRefresh={listingsQuery.refetch} />
           }
-          ListEmptyComponent={<EmptyState loading={listingsQuery.isLoading} kind="listings" />}
+          ListEmptyComponent={
+            <EmptyState
+              loading={listingsQuery.isLoading}
+              kind="listings"
+              error={listingsQuery.isError}
+              errorObj={listingsQuery.error}
+              onRetry={() => listingsQuery.refetch()}
+              retrying={listingsQuery.isRefetching}
+            />
+          }
           renderItem={({ item, index }) => (
             <AnimatedEntrance index={index}>
               <ListingCard listing={item} onPress={() => router.push(`/(customer)/listings/${item.id}`)} />
@@ -214,7 +224,16 @@ export default function BrowseScreen() {
           refreshControl={
             <RefreshControl refreshing={providersQuery.isFetching} onRefresh={providersQuery.refetch} />
           }
-          ListEmptyComponent={<EmptyState loading={providersQuery.isLoading} kind="providers" />}
+          ListEmptyComponent={
+            <EmptyState
+              loading={providersQuery.isLoading}
+              kind="providers"
+              error={providersQuery.isError}
+              errorObj={providersQuery.error}
+              onRetry={() => providersQuery.refetch()}
+              retrying={providersQuery.isRefetching}
+            />
+          }
           renderItem={({ item, index }) => (
             <AnimatedEntrance index={index}>
               <ProviderCard provider={item} onPress={() => router.push(`/providers/${item.id}`)} />
@@ -235,8 +254,23 @@ export default function BrowseScreen() {
   )
 }
 
-function EmptyState({ loading, kind }: { loading: boolean; kind: Tab }) {
+function EmptyState({
+  loading,
+  kind,
+  error,
+  errorObj,
+  onRetry,
+  retrying,
+}: {
+  loading: boolean
+  kind: Tab
+  error?: boolean
+  errorObj?: unknown
+  onRetry?: () => void
+  retrying?: boolean
+}) {
   if (loading) return <ActivityIndicator style={{ marginTop: spacing.xxl }} color={colors.primary} />
+  if (error) return <ErrorState error={errorObj} onRetry={onRetry} retrying={retrying} style={{ marginTop: spacing.xxl }} />
   return (
     <AnimatedFade style={styles.empty}>
       <Text style={styles.emptyEmoji}>{kind === 'listings' ? '🔍' : '🧑‍🔧'}</Text>

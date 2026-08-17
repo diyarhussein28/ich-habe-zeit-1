@@ -29,6 +29,7 @@ interface FormState {
   phone: string
   password: string
   confirmPassword: string
+  referralCode: string
 }
 
 export default function RegisterScreen() {
@@ -41,6 +42,7 @@ export default function RegisterScreen() {
     phone: '',
     password: '',
     confirmPassword: '',
+    referralCode: '',
   })
   const [showPassword, setShowPassword] = useState(false)
   const [loading, setLoading] = useState(false)
@@ -78,6 +80,7 @@ export default function RegisterScreen() {
         password: form.password,
         displayName: `${form.firstName.trim()} ${form.lastName.trim()}`,
         role: form.role,
+        referralCode: form.referralCode.trim() || undefined,
       })
       router.push({
         pathname: '/(auth)/otp',
@@ -182,6 +185,15 @@ export default function RegisterScreen() {
             secureTextEntry={!showPassword}
             placeholder="Passwort wiederholen"
             error={errors.confirmPassword}
+          />
+
+          <Input
+            label="Empfehlungscode (optional)"
+            value={form.referralCode}
+            onChangeText={(v) => setForm((f) => ({ ...f, referralCode: v.toUpperCase() }))}
+            autoCapitalize="characters"
+            placeholder="z.B. AB12CD"
+            hint="Hast du einen Code von einem Freund erhalten?"
           />
 
           <Text style={styles.legal}>

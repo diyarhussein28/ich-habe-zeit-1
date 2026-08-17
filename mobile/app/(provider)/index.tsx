@@ -22,6 +22,7 @@ import { Badge } from '../../src/components/ui/Badge'
 import { Button } from '../../src/components/ui/Button'
 import { Input } from '../../src/components/ui/Input'
 import { NotificationBell } from '../../src/components/ui/NotificationBell'
+import { ErrorState } from '../../src/components/ui/ErrorState'
 import { StarRating } from '../../src/components/ui/StarRating'
 import { useAuthStore } from '../../src/store/auth.store'
 import { getApiErrorMessage } from '../../src/api/client'
@@ -41,12 +42,19 @@ export default function ProviderFeedScreen() {
   const [offerError, setOfferError] = useState<string | null>(null)
   const [successMsg, setSuccessMsg] = useState<string | null>(null)
 
-  const { data, isLoading, refetch } = useQuery({
+  const { data, isLoading, isError, error, refetch } = useQuery({
     queryKey: ['provider-feed'],
     queryFn: () => requestsApi.providerFeed({ limit: 30 }).then((r) => r.data),
   })
 
-  const { data: myOrdersData, isLoading: activeOrdersLoading } = useQuery({
+  const {
+    data: myOrdersData,
+    isLoading: activeOrdersLoading,
+    isError: activeOrdersError,
+    error: activeOrdersErrorObj,
+    refetch: refetchActiveOrders,
+    isRefetching: activeOrdersRefetching,
+  } = useQuery({
     queryKey: ['provider-orders-recent'],
     queryFn: () => ordersApi.list({ limit: 20, perspective: 'provider' }).then((r) => {
       const raw = r.data as unknown as { orders?: Order[] }
@@ -122,6 +130,8 @@ export default function ProviderFeedScreen() {
             </View>
             {activeOrdersLoading ? (
               <ActivityIndicator color={colors.primary} style={{ marginVertical: spacing.lg }} />
+            ) : activeOrdersError ? (
+              <ErrorState error={activeOrdersErrorObj} onRetry={() => refetchActiveOrders()} retrying={activeOrdersRefetching} />
             ) : activeOrders.length === 0 ? (
               <View style={styles.activeEmpty}>
                 <Text style={styles.activeEmptyEmoji}>🔧</Text>
@@ -141,6 +151,8 @@ export default function ProviderFeedScreen() {
         ListEmptyComponent={
           isLoading ? (
             <ActivityIndicator color={colors.primary} style={{ marginTop: spacing.xxl }} />
+          ) : isError ? (
+            <ErrorState error={error} onRetry={() => refetch()} fullScreen={false} style={{ marginTop: spacing.xl }} />
           ) : (
             <View style={styles.empty}>
               <Text style={styles.emptyEmoji}>📌</Text>

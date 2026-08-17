@@ -6,6 +6,7 @@ import {
   TouchableOpacity,
   StyleSheet,
   RefreshControl,
+  ActivityIndicator,
 } from 'react-native'
 import { useQuery } from '@tanstack/react-query'
 import { useRouter } from 'expo-router'
@@ -13,6 +14,7 @@ import { SafeAreaView } from 'react-native-safe-area-context'
 import { ordersApi } from '../../../src/api/orders.api'
 import { Card } from '../../../src/components/ui/Card'
 import { Badge } from '../../../src/components/ui/Badge'
+import { ErrorState } from '../../../src/components/ui/ErrorState'
 import { colors, spacing, fontSize, fontWeight } from '../../../src/constants/theme'
 import { formatEur } from '../../../src/utils/currency'
 import type { Order } from '../../../src/api/types'
@@ -50,7 +52,7 @@ type Tab = 'ACTIVE' | 'HISTORY'
 export default function CustomerOrdersScreen() {
   const router = useRouter()
   const [tab, setTab] = useState<Tab>('ACTIVE')
-  const { data, isLoading, refetch } = useQuery({
+  const { data, isLoading, isError, error, refetch, isRefetching } = useQuery({
     queryKey: ['customer-orders'],
     queryFn: () => ordersApi.list({ limit: 50, perspective: 'customer' }).then((r) => r.data),
   })
@@ -89,7 +91,11 @@ export default function CustomerOrdersScreen() {
         showsVerticalScrollIndicator={false}
         refreshControl={<RefreshControl refreshing={isLoading} onRefresh={refetch} />}
         ListEmptyComponent={
-          isLoading ? null : (
+          isLoading ? (
+            <ActivityIndicator color={colors.primary} style={{ marginTop: spacing.xxl }} />
+          ) : isError ? (
+            <ErrorState error={error} onRetry={() => refetch()} retrying={isRefetching} style={{ marginTop: spacing.xxl }} />
+          ) : (
             <View style={styles.empty}>
               <Text style={styles.emptyEmoji}>{tab === 'ACTIVE' ? '✅' : '📦'}</Text>
               <Text style={styles.emptyTitle}>

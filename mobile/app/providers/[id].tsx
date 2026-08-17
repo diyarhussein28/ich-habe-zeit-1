@@ -4,6 +4,8 @@ import { useLocalSearchParams, useRouter } from 'expo-router'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { useQuery } from '@tanstack/react-query'
 import { providersApi, type ProviderReview } from '../../src/api/providers.api'
+import { FavoriteButton } from '../../src/components/FavoriteButton'
+import { ErrorState } from '../../src/components/ui/ErrorState'
 import { Card } from '../../src/components/ui/Card'
 import { Badge } from '../../src/components/ui/Badge'
 import { StarRating } from '../../src/components/ui/StarRating'
@@ -15,7 +17,7 @@ export default function PublicProviderProfileScreen() {
   const { id } = useLocalSearchParams<{ id: string }>()
   const router = useRouter()
 
-  const { data: provider, isLoading } = useQuery({
+  const { data: provider, isLoading, isError, error, refetch, isRefetching } = useQuery({
     queryKey: ['public-provider', id],
     queryFn: () => providersApi.get(id).then((r) => r.data.provider),
     enabled: !!id,
@@ -27,6 +29,14 @@ export default function PublicProviderProfileScreen() {
         <View style={styles.center}>
           <ActivityIndicator size="large" color={colors.primary} />
         </View>
+      </SafeAreaView>
+    )
+  }
+
+  if (isError) {
+    return (
+      <SafeAreaView style={styles.safe} edges={['top']}>
+        <ErrorState error={error} onRetry={() => refetch()} retrying={isRefetching} fullScreen />
       </SafeAreaView>
     )
   }
@@ -54,6 +64,7 @@ export default function PublicProviderProfileScreen() {
         <TouchableOpacity onPress={() => router.back()}>
           <Text style={styles.backText}>← Zurück</Text>
         </TouchableOpacity>
+        <FavoriteButton targetId={provider.id} type="provider" size={18} />
       </View>
 
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
@@ -77,7 +88,20 @@ export default function PublicProviderProfileScreen() {
             <Badge label={provider.isAvailable ? '● Verfügbar' : '● Ausgebucht'} color={provider.isAvailable ? 'success' : 'neutral'} />
             <Text style={styles.memberSince}>Mitglied seit {formatDate(provider.memberSince)}</Text>
           </View>
+          {provider.avgResponseMinutes != null ? (
+            <Text style={styles.responseTimeText}>⚡ Antwortet in der Regel {formatResponseTime(provider.avgResponseMinutes)}</Text>
+          ) : null}
         </View>
+
+        {/* Rating breakdown */}
+        {(provider.avgQualityScore || provider.avgPunctualityScore || provider.avgCommunicationScore) ? (
+          <Card style={styles.card}>
+            <Text style={styles.sectionLabel}>Bewertung im Detail</Text>
+            {provider.avgQualityScore ? <SubScoreRow label="Qualität" value={provider.avgQualityScore} /> : null}
+            {provider.avgPunctualityScore ? <SubScoreRow label="Pünktlichkeit" value={provider.avgPunctualityScore} /> : null}
+            {provider.avgCommunicationScore ? <SubScoreRow label="Kommunikation" value={provider.avgCommunicationScore} /> : null}
+          </Card>
+        ) : null}
 
         {/* Bio */}
         {provider.bio ? (
@@ -151,6 +175,24 @@ export default function PublicProviderProfileScreen() {
   )
 }
 
+function formatResponseTime(minutes: number): string {
+  if (minutes < 60) return `innerhalb von ${Math.max(1, Math.round(minutes))} Min.`
+  if (minutes < 24 * 60) return `innerhalb von ${Math.round(minutes / 60)} Std.`
+  return `innerhalb von ${Math.round(minutes / (24 * 60))} Tagen`
+}
+
+function SubScoreRow({ label, value }: { label: string; value: number }) {
+  return (
+    <View style={styles.subScoreRow}>
+      <Text style={styles.subScoreLabel}>{label}</Text>
+      <View style={styles.subScoreStars}>
+        <StarRating value={value} size={14} />
+        <Text style={styles.subScoreValue}>{value.toFixed(1)}</Text>
+      </View>
+    </View>
+  )
+}
+
 function ListingRow({ listing, onPress }: { listing: ServiceListing; onPress: () => void }) {
   return (
     <TouchableOpacity onPress={onPress} activeOpacity={0.85}>
@@ -172,6 +214,13 @@ function ReviewRow({ review }: { review: ProviderReview }) {
         <StarRating value={review.score} size={14} />
       </View>
       {review.comment ? <Text style={styles.reviewComment}>{review.comment}</Text> : null}
+      {review.photoUrls && review.photoUrls.length > 0 ? (
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.reviewPhotoScroll}>
+          {review.photoUrls.map((url) => (
+            <Image key={url} source={{ uri: url }} style={styles.reviewPhoto} />
+          ))}
+        </ScrollView>
+      ) : null}
       <Text style={styles.reviewDate}>{formatDate(review.createdAt)}</Text>
     </Card>
   )
@@ -181,7 +230,7 @@ const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.background },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   emptyText: { fontSize: fontSize.md, color: colors.textSecondary },
-  header: { paddingHorizontal: spacing.lg, paddingVertical: spacing.md },
+  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: spacing.lg, paddingVertical: spacing.md },
   backText: { fontSize: fontSize.md, color: colors.primary, fontWeight: fontWeight.medium },
   content: { padding: spacing.lg, paddingTop: 0 },
   identity: { alignItems: 'center', marginBottom: spacing.lg },
@@ -193,6 +242,13 @@ const styles = StyleSheet.create({
   ratingText: { fontSize: fontSize.sm, color: colors.textSecondary },
   badgeRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   memberSince: { fontSize: fontSize.xs, color: colors.textDisabled },
+  responseTimeText: { fontSize: fontSize.xs, color: colors.textSecondary, marginTop: spacing.sm },
+  subScoreRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.xs },
+  subScoreLabel: { fontSize: fontSize.sm, color: colors.text },
+  subScoreStars: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
+  subScoreValue: { fontSize: fontSize.xs, color: colors.textSecondary },
+  reviewPhotoScroll: { flexGrow: 0, flexShrink: 0, marginBottom: spacing.xs },
+  reviewPhoto: { width: 64, height: 64, borderRadius: radius.md, marginRight: spacing.xs, backgroundColor: colors.border },
   card: { marginBottom: spacing.md },
   sectionLabel: { fontSize: fontSize.xs, fontWeight: fontWeight.semibold, color: colors.textSecondary, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: spacing.sm },
   sectionLabelOutside: { marginBottom: spacing.sm, marginLeft: spacing.xs },

@@ -5,6 +5,10 @@ export interface ProviderReview {
   id: string
   score: number
   comment?: string
+  photoUrls?: string[]
+  qualityScore?: number | null
+  punctualityScore?: number | null
+  communicationScore?: number | null
   createdAt: string
   reviewerName: string
 }
@@ -20,6 +24,10 @@ export interface PublicProviderProfile {
   isAvailable: boolean
   averageRating: number
   totalReviews: number
+  avgQualityScore?: number | null
+  avgPunctualityScore?: number | null
+  avgCommunicationScore?: number | null
+  avgResponseMinutes?: number | null
   categories: { id: string; name: string; icon?: string; isVerified: boolean }[]
   serviceAreas: { homePlz: string; radiusKm: number }[]
   listings: ServiceListing[]
@@ -65,6 +73,7 @@ export interface TopProvider {
   averageRating: number
   totalReviews: number
   completedJobsCount: number
+  avgResponseMinutes?: number | null
   categories: { id: string; name: string; icon?: string }[]
 }
 

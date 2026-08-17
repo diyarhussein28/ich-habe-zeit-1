@@ -1,5 +1,6 @@
 import axios, { AxiosError, InternalAxiosRequestConfig } from 'axios'
 import { getItem, deleteItem } from '../utils/storage'
+import { captureException } from '../utils/sentry'
 
 export const TOKEN_KEY = 'ihz_auth_token'
 
@@ -48,6 +49,11 @@ apiClient.interceptors.response.use(
       config._retried = true
       await new Promise((resolve) => setTimeout(resolve, 800))
       return apiClient.request(config)
+    }
+
+    // Only report unexpected failures (server bugs), not routine 4xx validation/auth errors.
+    if (!error.response || error.response.status >= 500) {
+      captureException(error, { extra: { url: config?.url, method: config?.method } })
     }
 
     return Promise.reject(error)

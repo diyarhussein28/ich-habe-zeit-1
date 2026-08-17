@@ -15,6 +15,7 @@ import { requestsApi } from '../../../src/api/requests.api'
 import { Card } from '../../../src/components/ui/Card'
 import { Badge } from '../../../src/components/ui/Badge'
 import { Button } from '../../../src/components/ui/Button'
+import { ErrorState } from '../../../src/components/ui/ErrorState'
 import { colors, spacing, fontSize, fontWeight } from '../../../src/constants/theme'
 import { formatEur } from '../../../src/utils/currency'
 import type { ServiceRequest } from '../../../src/api/types'
@@ -49,7 +50,7 @@ const STATUS_COLOR: Record<string, 'primary' | 'success' | 'warning' | 'error' |
 
 export default function MyRequestsScreen() {
   const router = useRouter()
-  const { data, isLoading, refetch } = useQuery({
+  const { data, isLoading, isError, error, refetch, isRefetching } = useQuery({
     queryKey: ['my-requests'],
     queryFn: () => requestsApi.list({ limit: 50 }).then((r) => r.data.items),
   })
@@ -75,7 +76,11 @@ export default function MyRequestsScreen() {
         showsVerticalScrollIndicator={false}
         refreshControl={<RefreshControl refreshing={isLoading} onRefresh={refetch} />}
         ListEmptyComponent={
-          isLoading ? null : (
+          isLoading ? (
+            <ActivityIndicator color={colors.primary} style={{ marginTop: spacing.xxl }} />
+          ) : isError ? (
+            <ErrorState error={error} onRetry={() => refetch()} retrying={isRefetching} style={{ marginTop: spacing.xxl }} />
+          ) : (
             <View style={styles.empty}>
               <Text style={styles.emptyEmoji}>📋</Text>
               <Text style={styles.emptyTitle}>Noch keine Aufträge</Text>

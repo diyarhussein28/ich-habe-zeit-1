@@ -94,7 +94,17 @@ export async function createPaymentIntentForOrder(orderId: string, userId: strin
   })
   if (!order) throw new Error('ORDER_NOT_FOUND')
 
-  const amountCents = Math.round(order.grossAmount * 100)
+  // Referral credit (if any was applied when this order's offer was
+  // accepted) reduces what's actually charged here without touching
+  // order.grossAmount, which the provider's payout math is derived from.
+  const creditRedemptions = await prisma.creditTransaction.aggregate({
+    where: { orderId, reason: 'ORDER_REDEMPTION' },
+    _sum: { amount: true },
+  })
+  const appliedCredit = Math.abs(creditRedemptions._sum.amount ?? 0)
+  const chargeAmount = Math.max(0, order.grossAmount - appliedCredit)
+
+  const amountCents = Math.round(chargeAmount * 100)
   const customerId = await ensureStripeCustomer(userId)
 
   const [pi, ephemeralKey] = await Promise.all([

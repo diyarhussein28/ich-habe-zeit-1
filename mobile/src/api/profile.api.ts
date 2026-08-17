@@ -5,6 +5,8 @@ export interface FullProfile extends User {
   phone?: string
   dateOfBirth?: string
   profilePhotoUrl?: string
+  referralCode?: string
+  customerProfile?: { creditBalance: number } | null
 }
 
 export interface ProfileCategory {
@@ -137,4 +139,9 @@ export const profileApi = {
 
   getKleinunternehmerStatus: () =>
     apiClient.get<KleinunternehmerStatus>('/api/invoices/kleinunternehmer-status'),
+
+  getProviderEarnings: () =>
+    apiClient.get<{ months: { key: string; label: string; netAmount: number; orderCount: number }[] }>(
+      '/api/profile/provider/earnings'
+    ),
 }

@@ -3,6 +3,10 @@ import { apiClient } from './client'
 export interface RatingPayload {
   rating: number
   comment?: string
+  qualityScore?: number
+  punctualityScore?: number
+  communicationScore?: number
+  photoUrls?: string[]
 }
 
 export interface Rating {
@@ -10,6 +14,10 @@ export interface Rating {
   orderId: string
   score: number
   comment?: string
+  qualityScore?: number | null
+  punctualityScore?: number | null
+  communicationScore?: number | null
+  photoUrls?: string[]
   createdAt: string
 }
 

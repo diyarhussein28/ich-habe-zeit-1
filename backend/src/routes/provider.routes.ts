@@ -154,6 +154,7 @@ export async function providerRoutes(app: FastifyInstance) {
         averageRating: p.averageRating,
         totalReviews: p.totalReviews,
         completedJobsCount: p._count.offers,
+        avgResponseMinutes: p.avgResponseMinutes,
         categories: p.providerCategories.map((pc) => ({
           id: pc.category.id,
           name: pc.category.name,
@@ -196,6 +197,10 @@ export async function providerRoutes(app: FastifyInstance) {
       id: r.id,
       score: r.score,
       comment: r.comment,
+      photoUrls: r.photoUrls,
+      qualityScore: r.qualityScore,
+      punctualityScore: r.punctualityScore,
+      communicationScore: r.communicationScore,
       createdAt: r.createdAt,
       reviewerName: r.customerRater?.user.displayName ?? 'Anonym',
     }))
@@ -212,6 +217,10 @@ export async function providerRoutes(app: FastifyInstance) {
         isAvailable: provider.isAvailable,
         averageRating: provider.averageRating,
         totalReviews: provider.totalReviews,
+        avgQualityScore: provider.avgQualityScore,
+        avgPunctualityScore: provider.avgPunctualityScore,
+        avgCommunicationScore: provider.avgCommunicationScore,
+        avgResponseMinutes: provider.avgResponseMinutes,
         categories: provider.providerCategories.map((pc) => ({
           id: pc.category.id,
           name: pc.category.name,

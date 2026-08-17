@@ -7,13 +7,14 @@ import {
   ScrollView,
   TextInput,
   ActivityIndicator,
+  Share,
 } from 'react-native'
 import { useRouter } from 'expo-router'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useAuthStore } from '../../../src/store/auth.store'
 import { authApi } from '../../../src/api/auth.api'
-import { profileApi } from '../../../src/api/profile.api'
+import { profileApi, type FullProfile } from '../../../src/api/profile.api'
 import { Card } from '../../../src/components/ui/Card'
 import { Badge } from '../../../src/components/ui/Badge'
 import { Button } from '../../../src/components/ui/Button'
@@ -58,7 +59,7 @@ export default function CustomerProfileScreen() {
     enabled: !!user,
   })
 
-  const profile = data ?? user
+  const profile: FullProfile | undefined = data ?? (user as FullProfile | null) ?? undefined
 
   const saveMutation = useMutation({
     mutationFn: () => {
@@ -132,6 +133,34 @@ export default function CustomerProfileScreen() {
             style={{ marginTop: spacing.sm }}
           />
         </View>
+
+        {/* Referral & Credit */}
+        {profile.referralCode ? (
+          <Card style={styles.referralCard}>
+            <View style={styles.referralHeader}>
+              <Text style={styles.referralTitle}>🎁 Freunde einladen</Text>
+              {typeof profile.customerProfile?.creditBalance === 'number' && profile.customerProfile.creditBalance > 0 ? (
+                <Badge label={`${profile.customerProfile.creditBalance.toFixed(2)} € Guthaben`} color="success" />
+              ) : null}
+            </View>
+            <Text style={styles.referralDesc}>
+              Teile deinen Code. Sobald dein Freund den ersten Auftrag abschließt, erhältst du 15 € Guthaben.
+            </Text>
+            <View style={styles.referralCodeRow}>
+              <Text style={styles.referralCode}>{profile.referralCode}</Text>
+              <TouchableOpacity
+                style={styles.shareBtn}
+                onPress={() =>
+                  Share.share({
+                    message: `Nutze meinen Code ${profile.referralCode} bei Ich habe Zeit und wir bekommen beide Guthaben!`,
+                  })
+                }
+              >
+                <Text style={styles.shareBtnText}>Teilen</Text>
+              </TouchableOpacity>
+            </View>
+          </Card>
+        ) : null}
 
         {/* Edit form */}
         {editing && (
@@ -213,6 +242,8 @@ export default function CustomerProfileScreen() {
           <MenuItem emoji="🔒" label="Passwort ändern" onPress={() => router.push('/(auth)/forgot-password')} />
           <Divider />
           <MenuItem emoji="📍" label="Meine Adressen" onPress={() => router.push('/addresses')} />
+          <Divider />
+          <MenuItem emoji="❤️" label="Meine Favoriten" onPress={() => router.push('/favorites')} />
           <Divider />
           <MenuItem emoji="💳" label="Zahlungsmethoden" onPress={() => router.push('/payment-methods')} />
           <Divider />
@@ -314,6 +345,14 @@ const styles = StyleSheet.create({
   avatarText: { fontSize: fontSize.xxl, fontWeight: fontWeight.bold, color: colors.textInverse },
   name: { fontSize: fontSize.xl, fontWeight: fontWeight.bold, color: colors.text },
   email: { fontSize: fontSize.sm, color: colors.textSecondary, marginTop: spacing.xs },
+  referralCard: { marginBottom: spacing.md, backgroundColor: colors.primaryLight },
+  referralHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.xs },
+  referralTitle: { fontSize: fontSize.md, fontWeight: fontWeight.bold, color: colors.text },
+  referralDesc: { fontSize: fontSize.sm, color: colors.textSecondary, marginBottom: spacing.md, lineHeight: 18 },
+  referralCodeRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: colors.surface, borderRadius: radius.md, paddingVertical: spacing.sm, paddingHorizontal: spacing.md },
+  referralCode: { fontSize: fontSize.lg, fontWeight: fontWeight.bold, color: colors.primary, letterSpacing: 2 },
+  shareBtn: { backgroundColor: colors.primary, paddingHorizontal: spacing.md, paddingVertical: spacing.xs, borderRadius: radius.full },
+  shareBtnText: { color: colors.textInverse, fontSize: fontSize.sm, fontWeight: fontWeight.semibold },
   editCard: { marginBottom: spacing.md },
   editCardTitle: { fontSize: fontSize.md, fontWeight: fontWeight.semibold, color: colors.text, marginBottom: spacing.md },
   fieldLabel: { fontSize: fontSize.xs, fontWeight: fontWeight.semibold, color: colors.textSecondary, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: spacing.xs },

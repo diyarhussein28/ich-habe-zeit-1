@@ -12,6 +12,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { listingsApi, type ListingPackage, type PackageTier } from '../../../src/api/listings.api'
 import { PackagePicker } from '../../../src/components/listings/PackagePicker'
+import { FavoriteButton } from '../../../src/components/FavoriteButton'
 import { Button } from '../../../src/components/ui/Button'
 import { getApiErrorMessage } from '../../../src/api/client'
 import { colors, spacing, fontSize, fontWeight, radius } from '../../../src/constants/theme'
@@ -70,7 +71,7 @@ export default function ListingDetailScreen() {
           <Text style={styles.backText}>←</Text>
         </TouchableOpacity>
         <Text style={styles.headerTitle} numberOfLines={1}>{listing.title}</Text>
-        <View style={{ width: 32 }} />
+        <FavoriteButton targetId={listing.id} type="listing" size={16} />
       </View>
 
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.content}>

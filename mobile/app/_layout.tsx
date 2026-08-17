@@ -1,4 +1,5 @@
 import React, { useEffect } from 'react'
+import * as Sentry from '@sentry/react-native'
 import { Stack } from 'expo-router'
 import { QueryClientProvider } from '@tanstack/react-query'
 import { GestureHandlerRootView } from 'react-native-gesture-handler'
@@ -12,6 +13,9 @@ import { setUnauthorizedHandler } from '../src/api/client'
 import { usePushNotifications } from '../src/hooks/usePushNotifications'
 import { queryClient } from '../src/utils/queryClient'
 import { colors } from '../src/constants/theme'
+import { initSentry } from '../src/utils/sentry'
+
+initSentry()
 
 function RootLayoutInner() {
   const { hydrate, logout, user } = useAuthStore()
@@ -56,7 +60,7 @@ function RootLayoutInner() {
   )
 }
 
-export default function RootLayout() {
+function RootLayout() {
   return (
     <QueryClientProvider client={queryClient}>
       <GestureHandlerRootView style={styles.root}>
@@ -72,3 +76,5 @@ export default function RootLayout() {
 }
 
 const styles = StyleSheet.create({ root: { flex: 1, backgroundColor: colors.background } })
+
+export default Sentry.wrap(RootLayout)

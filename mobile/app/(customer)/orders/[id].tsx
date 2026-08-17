@@ -18,6 +18,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { ordersApi } from '../../../src/api/orders.api'
 import { ratingsApi } from '../../../src/api/ratings.api'
 import { DisputeModal } from '../../../src/components/DisputeModal'
+import { PhotoGridPicker } from '../../../src/components/PhotoGridPicker'
 import { RatingButton } from '../../../src/components/RatingButton'
 import { useOrderLiveSync } from '../../../src/hooks/useOrderLiveSync'
 import { Card } from '../../../src/components/ui/Card'
@@ -66,6 +67,10 @@ export default function CustomerOrderDetailScreen() {
   const [showRatingModal, setShowRatingModal] = useState(false)
   const [rating, setRating] = useState(0)
   const [ratingComment, setRatingComment] = useState('')
+  const [qualityScore, setQualityScore] = useState(0)
+  const [punctualityScore, setPunctualityScore] = useState(0)
+  const [communicationScore, setCommunicationScore] = useState(0)
+  const [ratingPhotos, setRatingPhotos] = useState<string[]>([])
 
   const [payLoading, setPayLoading] = useState(false)
   const [payError, setPayError] = useState<string | null>(null)
@@ -132,7 +137,15 @@ export default function CustomerOrderDetailScreen() {
   })
 
   const ratingMutation = useMutation({
-    mutationFn: () => ratingsApi.submit(id, { rating, comment: ratingComment.trim() || undefined }),
+    mutationFn: () =>
+      ratingsApi.submit(id, {
+        rating,
+        comment: ratingComment.trim() || undefined,
+        qualityScore: qualityScore || undefined,
+        punctualityScore: punctualityScore || undefined,
+        communicationScore: communicationScore || undefined,
+        photoUrls: ratingPhotos.length > 0 ? ratingPhotos : undefined,
+      }),
     onSuccess: () => {
       setShowRatingModal(false)
       qc.invalidateQueries({ queryKey: ['my-rating', id] })
@@ -361,12 +374,17 @@ export default function CustomerOrderDetailScreen() {
       {/* Rating modal */}
       <Modal visible={showRatingModal} animationType="slide" transparent onRequestClose={() => setShowRatingModal(false)}>
         <KeyboardAvoidingView style={styles.modalOverlay} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-          <View style={styles.modalSheet}>
+          <ScrollView style={styles.modalSheet} contentContainerStyle={{ paddingBottom: spacing.xxl }}>
             <Text style={styles.modalTitle}>Bewertung abgeben</Text>
             <Text style={styles.modalSubtitle}>{providerName} bewerten</Text>
             <View style={styles.starsCenter}>
               <StarRating value={rating} onPress={setRating} size={40} />
             </View>
+
+            <SubScoreRow label="Qualität" value={qualityScore} onChange={setQualityScore} />
+            <SubScoreRow label="Pünktlichkeit" value={punctualityScore} onChange={setPunctualityScore} />
+            <SubScoreRow label="Kommunikation" value={communicationScore} onChange={setCommunicationScore} />
+
             <TextInput
               style={styles.ratingInput}
               value={ratingComment}
@@ -377,6 +395,10 @@ export default function CustomerOrderDetailScreen() {
               numberOfLines={3}
               textAlignVertical="top"
             />
+
+            <Text style={styles.photoLabel}>Fotos (optional)</Text>
+            <PhotoGridPicker urls={ratingPhotos} onChange={setRatingPhotos} context="REVIEW_PHOTO" maxPhotos={6} />
+
             <View style={styles.modalActions}>
               <Button label="Überspringen" variant="ghost" onPress={() => setShowRatingModal(false)} fullWidth={false} style={styles.modalBtn} />
               <Button
@@ -390,10 +412,27 @@ export default function CustomerOrderDetailScreen() {
                 style={styles.modalBtn}
               />
             </View>
-          </View>
+          </ScrollView>
         </KeyboardAvoidingView>
       </Modal>
     </SafeAreaView>
+  )
+}
+
+function SubScoreRow({
+  label,
+  value,
+  onChange,
+}: {
+  label: string
+  value: number
+  onChange: (v: number) => void
+}) {
+  return (
+    <View style={styles.subScoreRow}>
+      <Text style={styles.subScoreLabel}>{label}</Text>
+      <StarRating value={value} onPress={onChange} size={20} />
+    </View>
   )
 }
 
@@ -477,6 +516,9 @@ const styles = StyleSheet.create({
     marginBottom: spacing.lg,
   },
   starsCenter: { alignItems: 'center', marginVertical: spacing.lg },
+  subScoreRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.md },
+  subScoreLabel: { fontSize: fontSize.sm, color: colors.text, fontWeight: fontWeight.medium },
+  photoLabel: { fontSize: fontSize.sm, color: colors.text, fontWeight: fontWeight.medium, marginTop: spacing.md, marginBottom: spacing.sm },
   ratingInput: {
     backgroundColor: colors.background,
     borderWidth: 1.5,
